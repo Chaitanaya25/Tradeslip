@@ -6,6 +6,10 @@ export function buildPublicUrl(appUrl: string, token: string): string {
   return `${appUrl.replace(/\/+$/, "")}/q/${token}`;
 }
 
+export function buildPublicInvoiceUrl(appUrl: string, token: string): string {
+  return `${appUrl.replace(/\/+$/, "")}/i/${token}`;
+}
+
 const DIAL_CODE: Record<Country, string> = { US: "1", UK: "44", AU: "61" };
 
 /**

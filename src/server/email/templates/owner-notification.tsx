@@ -2,6 +2,7 @@ import { Button, Text } from "@react-email/components";
 import { COLORS, EmailLayout, buttonStyle, muted, paragraph } from "./layout";
 
 export type OwnerNotificationProps =
+  | { kind: "invoice_viewed"; number: string; customerName: string | null; link: string; businessName: string; quoteWord?: never }
   | { kind: "viewed"; quoteWord: string; number: string; customerName: string | null; link: string; businessName: string }
   | {
       kind: "accepted";
@@ -20,6 +21,7 @@ export type OwnerNotificationProps =
 
 export function ownerNotificationSubject(p: OwnerNotificationProps): string {
   const who = p.customerName?.trim() || "Your customer";
+  if (p.kind === "invoice_viewed") return `${who} viewed invoice #${p.number}`;
   if (p.kind === "viewed") return `${who} viewed ${p.quoteWord.toLowerCase()} #${p.number}`;
   if (p.kind === "accepted") return `${who} accepted ${p.quoteWord.toLowerCase()} #${p.number}`;
   return `${who} declined ${p.quoteWord.toLowerCase()} #${p.number}`;
@@ -28,10 +30,16 @@ export function ownerNotificationSubject(p: OwnerNotificationProps): string {
 /** Short note to the business owner when a customer views, accepts or declines. */
 export function OwnerNotificationEmail(p: OwnerNotificationProps) {
   const who = p.customerName?.trim() || "Your customer";
-  const word = p.quoteWord.toLowerCase();
+  const word = p.kind === "invoice_viewed" ? "invoice" : p.quoteWord.toLowerCase();
 
   return (
     <EmailLayout preview={ownerNotificationSubject(p)} businessName={p.businessName} footer="You get this because it is your Tradeslip account.">
+      {p.kind === "invoice_viewed" ? (
+        <Text style={paragraph}>
+          {who} just opened invoice #{p.number}. It is not marked as paid yet.
+        </Text>
+      ) : null}
+
       {p.kind === "viewed" ? (
         <Text style={paragraph}>
           {who} just opened {word} #{p.number}. No reply yet.

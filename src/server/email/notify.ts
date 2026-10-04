@@ -3,6 +3,7 @@ import { formatMoney } from "@/lib/money";
 import { depositCents } from "@/lib/quote-calc";
 import { REGIONS, quoteWord } from "@/lib/region";
 import { getOwnerNotificationTarget } from "@/server/public";
+import { getInvoiceOwnerTarget } from "@/server/public-invoice";
 import { sendEmail } from "./send";
 import { OwnerNotificationEmail, ownerNotificationSubject, type OwnerNotificationProps } from "./templates/owner-notification";
 
@@ -56,5 +57,26 @@ export async function notifyOwner(token: string, event: Event): Promise<void> {
     });
   } catch {
     console.warn("[email] owner notification skipped");
+  }
+}
+
+/** Tell the owner their invoice was opened (called once, on the first view). Never throws. */
+export async function notifyInvoiceViewed(token: string): Promise<void> {
+  try {
+    const target = await getInvoiceOwnerTarget(token);
+    const to = target?.business.email;
+    if (!target || !to) return;
+
+    const { invoice, business, customerName } = target;
+    const props: OwnerNotificationProps = {
+      kind: "invoice_viewed",
+      number: `${business.invoice_prefix}${invoice.number}`,
+      customerName,
+      link: `${appUrl()}/invoices/${invoice.id}`,
+      businessName: business.name,
+    };
+    await sendEmail({ businessName: business.name, to, subject: ownerNotificationSubject(props), react: OwnerNotificationEmail(props) });
+  } catch {
+    console.warn("[email] invoice notification skipped");
   }
 }

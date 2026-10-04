@@ -30,6 +30,9 @@ export type QuoteDocData = {
   pageSize: "LETTER" | "A4";
 };
 
+/** The parts of a printed document that quotes and invoices share. */
+export type CommonDocData = Omit<QuoteDocData, "validUntil" | "deposit" | "photos">;
+
 /** PDF renderers handle PNG and JPEG only, so other logo formats fall back to the monogram. */
 export function pdfSafeLogoUrl(url: string | null): string | null {
   return url && /\.(png|jpe?g)(\?|$)/i.test(url) ? url : null;

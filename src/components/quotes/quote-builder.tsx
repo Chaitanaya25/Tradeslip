@@ -38,7 +38,7 @@ import { calculateQuoteTotals, depositCents, todayInTimezone } from "@/lib/quote
 import { quoteInputSchema, type QuoteFormValues } from "@/lib/schemas/quote";
 import type { DraftApiResponse } from "@/app/api/ai/draft-quote/route";
 import { deleteDraftQuote, duplicateQuote, saveQuoteDraft } from "@/server/actions/quotes";
-import { sendQuote, type SendUsage } from "@/server/actions/quote-sending";
+import { logQuoteShared, sendQuote, sendQuoteEmail, type SendUsage } from "@/server/actions/quote-sending";
 import type { PhotoDto } from "@/server/actions/quote-photos";
 
 export function QuoteBuilder({
@@ -461,8 +461,9 @@ export function QuoteBuilder({
             // Once sent the draft is read-only, so closing the sheet goes to the quote's page.
             if (!open) router.replace(`/quotes/${sendSession.quoteId}`);
           }}
-          quoteId={sendSession.quoteId}
           link={sendSession.link}
+          onEmail={(to) => sendQuoteEmail(sendSession.quoteId, to)}
+          onShared={(channel) => logQuoteShared(sendSession.quoteId, channel)}
           customer={{
             name: getValues("customer.name") || null,
             email: getValues("customer.email") || null,

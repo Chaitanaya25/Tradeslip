@@ -8,16 +8,13 @@ import { todayInTimezone } from "@/lib/quote-calc";
 import {
   buildDuplicatePayload,
   buildSavePayload,
-  escapeLikePattern,
-  findMatchingCustomer,
   type DocItem,
 } from "@/lib/quote-helpers";
 import { isValidVoicePath } from "@/lib/voice";
-import { quoteInputSchema, type QuoteFormValues, type QuoteInput } from "@/lib/schemas/quote";
+import { quoteInputSchema, type QuoteFormValues } from "@/lib/schemas/quote";
 import type { Business } from "@/lib/supabase/tables";
+import { allocateNumber, resolveCustomer, type Ctx } from "@/server/customer-resolver";
 import { actionBusinessContext } from "./context";
-
-type Ctx = Extract<Awaited<ReturnType<typeof actionBusinessContext>>, { ok: true }>;
 
 const idSchema = z.uuid();
 const NOT_EDITABLE = "This quote has already been sent, so it can't be edited. Duplicate it to make changes.";
@@ -44,14 +41,6 @@ function saveErrorMessage(error: { code?: string; message?: string }): string {
   return "We couldn't save the quote. Try again.";
 }
 
-async function allocateNumber(ctx: Ctx): Promise<number | null> {
-  const { data, error } = await ctx.supabase.rpc("next_doc_number", {
-    p_business_id: ctx.business.id,
-    p_kind: "quote",
-  });
-  return error || typeof data !== "number" ? null : data;
-}
-
 async function logActivity(ctx: Ctx, quoteId: string, event: string, meta: Record<string, string | number>) {
   // The audit trail is best effort: never fail a save because of it.
   await ctx.supabase.from("activity").insert({
@@ -61,56 +50,6 @@ async function logActivity(ctx: Ctx, quoteId: string, event: string, meta: Recor
     event,
     meta,
   });
-}
-
-/**
- * The customer for a quote: the explicitly chosen one (updated with the form's
- * contact details), else an existing match (same name + phone or postcode), else new.
- */
-async function resolveCustomer(
-  ctx: Ctx,
-  customer: QuoteInput["customer"],
-): Promise<{ id: string } | { error: ReturnType<typeof failure> }> {
-  const columns = {
-    name: customer.name,
-    email: customer.email,
-    phone: customer.phone,
-    address_line1: customer.address_line1,
-    city: customer.city,
-    region: customer.region,
-    postcode: customer.postcode,
-  };
-
-  if (customer.customer_id) {
-    const { data, error } = await ctx.supabase
-      .from("customers")
-      .update(columns)
-      .eq("id", customer.customer_id)
-      .eq("business_id", ctx.business.id)
-      .select("id");
-    if (error) return { error: failure("We couldn't save the customer. Try again.") };
-    if (!data || data.length === 0) {
-      return { error: failure("That customer no longer exists.", { "customer.name": "Choose the customer again." }) };
-    }
-    return { id: customer.customer_id };
-  }
-
-  const { data: candidates } = await ctx.supabase
-    .from("customers")
-    .select("id, name, phone, postcode")
-    .eq("business_id", ctx.business.id)
-    .ilike("name", escapeLikePattern(customer.name.trim()))
-    .limit(25);
-  const match = findMatchingCustomer(candidates ?? [], customer);
-  if (match) return { id: match.id };
-
-  const { data: created, error } = await ctx.supabase
-    .from("customers")
-    .insert({ ...columns, business_id: ctx.business.id })
-    .select("id")
-    .single();
-  if (error || !created) return { error: failure("We couldn't save the customer. Try again.") };
-  return { id: created.id };
 }
 
 /** Create a new draft or update an existing one. Totals are always recomputed here. */
@@ -170,7 +109,7 @@ export async function saveQuoteDraft(
   const created = !existing;
 
   if (!existing) {
-    const allocated = await allocateNumber(ctx);
+    const allocated = await allocateNumber(ctx, "quote");
     if (allocated === null) return failure("We couldn't number the quote. Try again.");
     number = allocated;
 
@@ -233,7 +172,7 @@ export async function duplicateQuote(sourceId: string): Promise<ActionResult<{ q
     todayInTimezone(ctx.business.timezone),
   );
 
-  const number = await allocateNumber(ctx);
+  const number = await allocateNumber(ctx, "quote");
   if (number === null) return failure("We couldn't number the new quote. Try again.");
 
   const { data: shell, error } = await ctx.supabase

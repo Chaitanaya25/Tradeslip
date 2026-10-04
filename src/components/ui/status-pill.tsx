@@ -12,6 +12,8 @@ const STATUS_STYLES = {
   overdue: { label: "Overdue", className: "bg-status-bad-bg text-status-bad-text" },
   declined: { label: "Declined", className: "bg-status-bad-bg text-status-bad-text" },
   expired: { label: "Expired", className: "bg-status-neutral-bg text-status-expired-text" },
+  partial: { label: "Partial", className: "bg-status-warn-bg text-status-warn-text" },
+  void: { label: "Void", className: "bg-status-neutral-bg text-status-expired-text" },
 } as const
 
 export type Status = keyof typeof STATUS_STYLES

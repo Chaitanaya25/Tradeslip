@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Check } from "./fields";
-import { PRICE_ITEM_TYPES } from "./price-item";
+import { MAX_ITEMS, checkCustomer, checkItems, customerShape, itemShape } from "./document-parts";
 
 /**
  * Quote form schema, shared by the builder (client) and the save action (server).
@@ -8,27 +8,7 @@ import { PRICE_ITEM_TYPES } from "./price-item";
  * Totals are NOT part of the input: the server always recomputes them.
  */
 
-export const MAX_ITEMS = 100;
-
-const customerShape = z.object({
-  customer_id: z.string(),
-  name: z.string(),
-  email: z.string(),
-  phone: z.string(),
-  address_line1: z.string(),
-  city: z.string(),
-  region: z.string(),
-  postcode: z.string(),
-});
-
-const itemShape = z.object({
-  description: z.string(),
-  type: z.string(),
-  qty: z.string(),
-  rate: z.string(),
-  price_item_id: z.string(),
-  needs_price: z.boolean(),
-});
+export { MAX_ITEMS };
 
 export const quoteInputSchema = z
   .object({
@@ -47,40 +27,8 @@ export const quoteInputSchema = z
   .transform((v, ctx) => {
     const c = new Check();
 
-    const customer = {
-      customer_id: c.uuid("customer.customer_id", v.customer.customer_id),
-      name: c.text("customer.name", v.customer.name, { label: "the customer's name", required: true, max: 80 }),
-      email: c.email("customer.email", v.customer.email) || null,
-      phone: c.phone("customer.phone", v.customer.phone) || null,
-      address_line1: c.text("customer.address_line1", v.customer.address_line1, { label: "an address", max: 120 }) || null,
-      city: c.text("customer.city", v.customer.city, { label: "a city", max: 80 }) || null,
-      region: c.text("customer.region", v.customer.region, { label: "a region", max: 80 }) || null,
-      postcode: c.text("customer.postcode", v.customer.postcode, { label: "a postcode", max: 20 }) || null,
-    };
-
-    // Rows with no description and no rate are just empty rows from "+ Add item": ignore them.
-    const items: {
-      description: string;
-      type: (typeof PRICE_ITEM_TYPES)[number];
-      qty: number;
-      unit_rate_cents: number;
-      price_item_id: string | null;
-      needs_price: boolean;
-    }[] = [];
-    v.items.forEach((item, i) => {
-      if (item.description.trim() === "" && item.rate.trim() === "") return;
-      const p = `items.${i}`;
-      const rate = c.money(`${p}.rate`, item.rate, { required: false });
-      items.push({
-        description: c.text(`${p}.description`, item.description, { label: "a description", required: true, max: 200 }),
-        type: c.oneOf(`${p}.type`, item.type, PRICE_ITEM_TYPES, "Choose a type."),
-        qty: c.quantity(`${p}.qty`, item.qty),
-        unit_rate_cents: rate,
-        price_item_id: c.uuid(`${p}.price_item_id`, item.price_item_id),
-        // Once a price is entered the line no longer needs one.
-        needs_price: item.needs_price && rate === 0,
-      });
-    });
+    const customer = checkCustomer(c, v.customer);
+    const items = checkItems(c, v.items);
 
     // The percentage is only required while the deposit is switched on.
     let deposit_bps = 3000;

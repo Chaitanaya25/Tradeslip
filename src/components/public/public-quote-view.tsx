@@ -1,15 +1,14 @@
 import { CircleCheck, MapPin } from "lucide-react";
+import { PublicDocHeader, PublicItemsList, PublicTotals } from "@/components/public/document-parts";
 import { QuoteResponse } from "@/components/public/quote-response";
 import { Button } from "@/components/ui/button";
 import { formatDateOnly } from "@/lib/dates";
-import { monogramFor } from "@/lib/quote-document";
 import { formatMoney } from "@/lib/money";
 import { formatBpsAsPercent } from "@/lib/money-input";
 import { depositCents } from "@/lib/quote-calc";
 import { formatCustomerAddress, type PublicQuote } from "@/lib/public-quote";
 import { REGIONS, quoteWord } from "@/lib/region";
 import { mailtoLink, normalizePhoneDigits, smsLink } from "@/lib/share-links";
-import { logoPublicUrl } from "@/lib/supabase/storage";
 
 type SignedPhoto = { url: string; kind: "before" | "after" | "other" };
 
@@ -45,8 +44,6 @@ export function PublicQuoteView({
   const number = `${quote.number_prefix}${quote.number}`;
   const address = formatCustomerAddress(customer);
   const deposit = quote.deposit_enabled ? depositCents(quote.total_cents, quote.deposit_bps) : null;
-  const logoUrl = logoPublicUrl(business.logo_path);
-  const monogram = monogramFor(business.name);
 
   // "Ask a question": email if the business has one, otherwise a text message.
   const message = `Hi ${business.name}, I have a question about ${wordLower} #${number}.`;
@@ -60,22 +57,11 @@ export function PublicQuoteView({
 
   return (
     <main className="mx-auto w-full max-w-[480px] px-5 pt-6 pb-10 text-[17px] leading-6">
-      <header className="flex items-center gap-4 border-b border-border pb-5">
-        <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-muted text-[19px] font-semibold text-text-muted">
-          {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- business logo from public storage
-            <img src={logoUrl} alt={`${business.name} logo`} width={56} height={56} className="size-full object-cover" />
-          ) : (
-            <span aria-hidden="true">{monogram}</span>
-          )}
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-[20px] leading-7 font-semibold">{business.name}</p>
-          <p className="text-[15px] text-text-muted">
-            {[business.tax_number ? "Licensed & insured" : null, business.phone].filter(Boolean).join(" · ")}
-          </p>
-        </div>
-      </header>
+      <PublicDocHeader
+        name={business.name}
+        logoPath={business.logo_path}
+        subline={[business.tax_number ? "Licensed & insured" : null, business.phone].filter(Boolean).join(" · ")}
+      />
 
       <section className="border-b border-border py-5">
         <h1 className="text-[24px] leading-8 font-semibold tracking-[-0.01em]">
@@ -97,49 +83,17 @@ export function PublicQuoteView({
         ) : null}
       </section>
 
-      <section className="border-b border-border py-4" aria-label="Items">
-        <div className="flex justify-between pb-2 text-[13px] text-text-muted">
-          <span>Description</span>
-          <span>Amount</span>
-        </div>
-        <ul className="divide-y divide-border">
-          {[...data.items]
-            .sort((a, b) => a.position - b.position)
-            .map((item) => (
-              <li key={item.position} className="flex items-start justify-between gap-4 py-3">
-                <div className="min-w-0">
-                  <p className="text-[16px]">{item.description}</p>
-                  {Number(item.qty) !== 1 ? (
-                    <p className="tabular text-[13px] text-text-muted">
-                      {Number(item.qty)} × {money(item.unit_rate_cents)}
-                    </p>
-                  ) : null}
-                </div>
-                <p className="tabular shrink-0 text-[16px]">{money(item.amount_cents)}</p>
-              </li>
-            ))}
-        </ul>
-      </section>
+      <PublicItemsList items={data.items} currency={quote.currency} locale={locale} />
 
-      <section className="space-y-1.5 border-b border-border py-4 text-[16px]">
-        <div className="flex justify-between text-text-muted">
-          <span>Subtotal</span>
-          <span className="tabular text-text">{money(quote.subtotal_cents)}</span>
-        </div>
-        {quote.tax_rate_bps > 0 ? (
-          <div className="flex justify-between text-text-muted">
-            <span>
-              {business.tax_label} ({formatBpsAsPercent(quote.tax_rate_bps)}%)
-            </span>
-            <span className="tabular text-text">{money(quote.tax_cents)}</span>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="flex items-baseline justify-between py-4">
-        <span className="text-[24px] leading-8 font-bold">Total</span>
-        <span className="tabular text-total text-accent">{money(quote.total_cents)}</span>
-      </section>
+      <PublicTotals
+        subtotalCents={quote.subtotal_cents}
+        taxCents={quote.tax_cents}
+        totalCents={quote.total_cents}
+        taxRateBps={quote.tax_rate_bps}
+        taxLabel={business.tax_label}
+        currency={quote.currency}
+        locale={locale}
+      />
 
       {deposit !== null ? (
         <section className="rounded-lg border border-accent-border bg-accent-soft p-4">

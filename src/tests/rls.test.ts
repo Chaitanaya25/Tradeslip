@@ -468,6 +468,115 @@ describe.skipIf(!configured)("Row Level Security", () => {
     });
   });
 
+  describe("invoices and payments (Phase 6)", () => {
+    const WHITELIST = {
+      top: "business,customer,invoice,items",
+      invoice: "amount_paid_cents,currency,days_overdue,due_date,issue_date,notes,number,number_prefix,paid_at,remaining_cents,status,subtotal_cents,tax_cents,tax_rate_bps,title,total_cents",
+      business: "country,email,logo_path,name,payment_link_url,phone,plan_branding,tax_label,tax_number,timezone",
+    };
+    let invoiceId: string;
+    let token: string;
+    const sorted = (o: object) => Object.keys(o).sort().join(",");
+
+    beforeAll(async () => {
+      token = `i${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "")}`.slice(0, 48);
+      const created = await a.db
+        .from("invoices")
+        .insert({ business_id: a.businessId, customer_id: a.customerId, number: 5001, currency: "USD", total_cents: 10000, subtotal_cents: 10000 })
+        .select("id")
+        .single();
+      if (created.error) throw created.error;
+      invoiceId = created.data.id;
+      await a.db.from("invoice_items").insert({ invoice_id: invoiceId, description: "Work", unit_rate_cents: 10000, amount_cents: 10000 });
+      // Send it the way the app does: draft -> sent with a fresh token.
+      const sent = await a.db
+        .from("invoices")
+        .update({ status: "sent", sent_at: new Date().toISOString(), public_token: token })
+        .eq("id", invoiceId);
+      if (sent.error) throw sent.error;
+    });
+
+    it("another business cannot read, update or pay an invoice", async () => {
+      const read = await b.db.from("invoices").select("id").eq("id", invoiceId);
+      expect(read.data ?? []).toHaveLength(0);
+      await b.db.from("invoices").update({ notes: "hacked" }).eq("id", invoiceId);
+      const row = await admin.from("invoices").select("notes").eq("id", invoiceId).single();
+      expect(row.data?.notes).not.toBe("hacked");
+      const pay = await b.db.rpc("record_invoice_payment", {
+        p_invoice_id: invoiceId, p_amount_cents: 100, p_method: "cash", p_paid_on: new Date().toISOString().slice(0, 10), p_note: null, p_idempotency_key: crypto.randomUUID(),
+      });
+      expect(pay.error).not.toBeNull();
+      const payments = await b.db.from("invoice_payments").select("id");
+      expect(payments.data ?? []).toHaveLength(0);
+    });
+
+    it("an owner cannot change amount_paid_cents, status or totals directly", async () => {
+      for (const patch of [{ amount_paid_cents: 10000 }, { status: "paid" as const }, { status: "void" as const }, { total_cents: 1 }]) {
+        const result = await a.db.from("invoices").update(patch).eq("id", invoiceId);
+        expect(result.error).not.toBeNull();
+      }
+      const row = await admin.from("invoices").select("amount_paid_cents, status, total_cents").eq("id", invoiceId).single();
+      expect(row.data).toMatchObject({ amount_paid_cents: 0, status: "sent", total_cents: 10000 });
+    });
+
+    it("items of a sent invoice cannot be changed, and payments cannot be inserted directly", async () => {
+      const edit = await a.db.from("invoice_items").update({ unit_rate_cents: 1 }).eq("invoice_id", invoiceId);
+      expect(edit.error).not.toBeNull();
+      const direct = await a.db.from("invoice_payments").insert({
+        invoice_id: invoiceId, business_id: a.businessId, amount_cents: 100, method: "cash", paid_on: new Date().toISOString().slice(0, 10),
+      });
+      expect(direct.error).not.toBeNull();
+    });
+
+    it("record_invoice_payment is idempotent and refuses over-payment", async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const key = crypto.randomUUID();
+      const args = { p_invoice_id: invoiceId, p_amount_cents: 4000, p_method: "cash", p_paid_on: today, p_note: null, p_idempotency_key: key };
+      const first = await a.db.rpc("record_invoice_payment", args);
+      expect(first.error).toBeNull();
+      const again = await a.db.rpc("record_invoice_payment", args);
+      expect(again.error).toBeNull();
+      expect((again.data as { duplicate: boolean }).duplicate).toBe(true);
+      const over = await a.db.rpc("record_invoice_payment", { ...args, p_amount_cents: 9000, p_idempotency_key: crypto.randomUUID() });
+      expect(over.error).not.toBeNull();
+      const row = await admin.from("invoices").select("amount_paid_cents").eq("id", invoiceId).single();
+      expect(row.data?.amount_paid_cents).toBe(4000);
+      const voided = await a.db.rpc("void_invoice", { p_invoice_id: invoiceId, p_reason: null });
+      expect(voided.error).not.toBeNull();
+    });
+
+    it("anonymous clients and owners cannot call the public invoice functions", async () => {
+      const anon = newClient(anonKey!);
+      for (const client of [a.db, b.db, anon]) {
+        expect((await client.rpc("get_public_invoice", { p_token: token })).error).not.toBeNull();
+        expect((await client.rpc("record_invoice_view", { p_token: token })).error).not.toBeNull();
+      }
+      const noAuth = await anon.rpc("create_invoice_from_quote", { p_quote_id: a.quoteId });
+      expect(noAuth.error).not.toBeNull();
+    });
+
+    it("get_public_invoice returns only the whitelisted keys and never the customer's email", async () => {
+      await admin.from("customers").update({ email: "invoice-customer@example.com" }).eq("id", a.customerId);
+      const { data } = await admin.rpc("get_public_invoice", { p_token: token });
+      const json = data as { invoice: object; business: object; items: object[]; customer: object };
+      expect(sorted(json)).toBe(WHITELIST.top);
+      expect(sorted(json.invoice)).toBe(WHITELIST.invoice);
+      expect(sorted(json.business)).toBe(WHITELIST.business);
+      expect(JSON.stringify(data)).not.toContain("invoice-customer@example.com");
+      expect(JSON.stringify(data)).not.toContain(invoiceId);
+    });
+
+    it("a draft invoice is not public", async () => {
+      const draft = await a.db
+        .from("invoices")
+        .insert({ business_id: a.businessId, number: 5002, currency: "USD" })
+        .select("public_token")
+        .single();
+      const { data } = await admin.rpc("get_public_invoice", { p_token: draft.data!.public_token });
+      expect(data).toBeNull();
+    });
+  });
+
   describe("server-controlled data", () => {
     it("an owner cannot change their own plan or billing columns", async () => {
       await a.db.from("businesses").update({ plan: "business", paddle_subscription_id: "sub_fake" }).eq("id", a.businessId);

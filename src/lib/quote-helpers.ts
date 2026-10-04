@@ -105,19 +105,23 @@ export function buildSavePayload(doc: SaveDoc, business: BusinessSnapshot) {
       // Only present when the caller supplied them, so the database keeps existing values otherwise.
       ...(doc.voice ? { voice_note_path: doc.voice.path, transcript: doc.voice.transcript } : {}),
     },
-    // Order in the array is the display order; the database stores position = index.
-    items: doc.items.map((item, position) => ({
-      position,
-      description: item.description,
-      type: item.type,
-      qty: item.qty,
-      unit_rate_cents: item.unit_rate_cents,
-      amount_cents: totals.lineAmountsCents[position],
-      price_item_id: item.price_item_id,
-      needs_price: item.needs_price && item.unit_rate_cents === 0,
-    })),
+    items: buildItemRows(doc.items, totals.lineAmountsCents),
     totals,
   };
+}
+
+/** Item rows for the save_* functions. Order in the array is the display order; the database stores position = index. */
+export function buildItemRows(items: readonly DocItem[], lineAmountsCents: readonly number[]) {
+  return items.map((item, position) => ({
+    position,
+    description: item.description,
+    type: item.type,
+    qty: item.qty,
+    unit_rate_cents: item.unit_rate_cents,
+    amount_cents: lineAmountsCents[position],
+    price_item_id: item.price_item_id,
+    needs_price: item.needs_price && item.unit_rate_cents === 0,
+  }));
 }
 
 // --- Duplicate -------------------------------------------------------------

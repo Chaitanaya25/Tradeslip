@@ -15,8 +15,18 @@ export default async function QuotesPage() {
     .order("created_at", { ascending: false })
     .limit(1000);
 
+  // Which quotes already have a (non-void) invoice, so the menu can say "View invoice".
+  const { data: linked } = await supabase
+    .from("invoices")
+    .select("id, quote_id")
+    .eq("business_id", business.id)
+    .not("quote_id", "is", null)
+    .neq("status", "void");
+  const invoiceByQuote = Object.fromEntries((linked ?? []).map((i) => [i.quote_id as string, i.id]));
+
   return (
     <QuotesList
+      invoiceByQuote={invoiceByQuote}
       quotes={(data ?? []) as unknown as QuoteRow[]}
       currency={business.currency}
       locale={REGIONS[business.country].locale}

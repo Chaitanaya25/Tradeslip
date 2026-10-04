@@ -11,7 +11,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import type { Country } from "@/lib/region";
 import { deleteDraftQuote, duplicateQuote } from "@/server/actions/quotes";
-import { regeneratePublicToken, type SendUsage } from "@/server/actions/quote-sending";
+import { logQuoteShared, regeneratePublicToken, sendQuoteEmail, type SendUsage } from "@/server/actions/quote-sending";
 
 /** Actions on the detail page. Editing and deleting are for drafts only; sharing is for sent quotes. */
 export function QuoteActions({
@@ -166,8 +166,9 @@ export function QuoteActions({
         <SendSheet
           open={sheetOpen}
           onOpenChange={setSheetOpen}
-          quoteId={quoteId}
           link={link}
+          onEmail={(to) => sendQuoteEmail(quoteId, to)}
+          onShared={(channel) => logQuoteShared(quoteId, channel)}
           customer={customer}
           businessName={businessName}
           country={country}

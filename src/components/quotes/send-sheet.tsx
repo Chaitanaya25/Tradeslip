@@ -10,12 +10,13 @@ import { useToast } from "@/components/ui/toast";
 import { EMAIL_DELIVERED } from "@/lib/email-errors";
 import type { Country } from "@/lib/region";
 import { buildShareMessage, normalizePhoneDigits, smsLink, whatsappLink } from "@/lib/share-links";
-import { logQuoteShared, sendQuoteEmail, type SendUsage } from "@/server/actions/quote-sending";
+
+export type SendUsage = { limit: number | null; remaining: number | null };
+
 
 export type SendSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  quoteId: string;
   link: string;
   customer: { name: string | null; email: string | null; phone: string | null };
   businessName: string;
@@ -23,8 +24,12 @@ export type SendSheetProps = {
   /** "Estimate" or "Quote". */
   quoteWord: string;
   usage: SendUsage | null;
-  /** True right after the first send, so the sheet can say the quote is now marked Sent. */
+  /** True right after the first send, so the sheet can say the document is now marked Sent. */
   justSent: boolean;
+  /** Email the link. Success only when the mail server accepted it. */
+  onEmail: (to?: string) => Promise<{ ok: true } | { ok: false; message: string }>;
+  /** Note that the owner opened the text / WhatsApp composer. */
+  onShared: (channel: "sms" | "whatsapp") => unknown;
 };
 
 type Delivery = { status: "idle" } | { status: "sending" } | { status: "sent"; message: string } | { status: "error"; message: string };
@@ -51,11 +56,11 @@ function DeliveryNote({ delivery }: { delivery: Delivery }) {
 }
 
 /**
- * Share a sent quote. Opening this sheet is what marks the quote as Sent. Copying the
+ * Share a sent quote or invoice. Opening this sheet is what marks it as Sent. Copying the
  * link, emailing it, and the text / WhatsApp buttons are separate delivery actions, each
  * with its own result, so nothing here claims a message arrived when it may not have.
  */
-export function SendSheet({ open, onOpenChange, quoteId, link, customer, businessName, country, quoteWord, usage, justSent }: SendSheetProps) {
+export function SendSheet({ open, onOpenChange, link, customer, businessName, country, quoteWord, usage, justSent, onEmail, onShared }: SendSheetProps) {
   const toast = useToast();
   const [email, setEmail] = useState(customer.email ?? "");
   const [emailDelivery, setEmailDelivery] = useState<Delivery>({ status: "idle" });
@@ -80,7 +85,7 @@ export function SendSheet({ open, onOpenChange, quoteId, link, customer, busines
   function sendEmail() {
     setEmailDelivery({ status: "sending" });
     startTransition(async () => {
-      const result = await sendQuoteEmail(quoteId, email.trim() || undefined);
+      const result = await onEmail(email.trim() || undefined);
       if (result.ok) {
         setEmailDelivery({ status: "sent", message: EMAIL_DELIVERED });
         toast.success("Email sent.");
@@ -94,7 +99,7 @@ export function SendSheet({ open, onOpenChange, quoteId, link, customer, busines
   function shared(channel: "sms" | "whatsapp") {
     // The message itself is sent from the owner's phone; we only note that it was opened.
     setPhoneOpened((current) => ({ ...current, [channel]: true }));
-    void logQuoteShared(quoteId, channel);
+    void onShared(channel);
   }
 
   return (

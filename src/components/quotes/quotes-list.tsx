@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Copy, ExternalLink, MoreHorizontal, Mic, Plus, Search, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, FilePlus2, FileText, MoreHorizontal, Mic, Plus, Search, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shell/page-header";
 import { Button } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/card";
@@ -22,6 +22,7 @@ import { formatShortDate } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { deleteDraftQuote, duplicateQuote } from "@/server/actions/quotes";
+import { createInvoiceFromQuote } from "@/server/actions/invoices";
 
 export type QuoteRow = {
   id: string;
@@ -53,7 +54,9 @@ export function QuotesList({
   timezone,
   docPrefix,
   quoteWord,
+  invoiceByQuote,
 }: {
+  invoiceByQuote: Record<string, string>;
   quotes: QuoteRow[];
   currency: string;
   locale: string;
@@ -90,6 +93,15 @@ export function QuotesList({
       if (!result.ok) return void toast.error(result.message);
       toast.success(`Duplicated as ${quoteWord.toLowerCase()} #${docPrefix}${result.number}.`);
       router.push(`/quotes/${result.quoteId}/edit`);
+    });
+  }
+
+  function createInvoice(row: QuoteRow) {
+    startTransition(async () => {
+      const result = await createInvoiceFromQuote(row.id);
+      if (!result.ok) return void toast.error(result.message);
+      if (result.alreadyExisted) toast.success(`An invoice already exists for this ${quoteWord.toLowerCase()}.`);
+      router.push(result.alreadyExisted ? `/invoices/${result.invoiceId}` : `/invoices/${result.invoiceId}/edit`);
     });
   }
 
@@ -233,6 +245,17 @@ export function QuotesList({
                             <DropdownMenuItem onSelect={() => duplicate(row)}>
                               <Copy /> Duplicate
                             </DropdownMenuItem>
+                            {row.status === "accepted" ? (
+                              invoiceByQuote[row.id] ? (
+                                <DropdownMenuItem onSelect={() => router.push(`/invoices/${invoiceByQuote[row.id]}`)}>
+                                  <FileText /> View invoice
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem onSelect={() => createInvoice(row)}>
+                                  <FilePlus2 /> Create invoice
+                                </DropdownMenuItem>
+                              )
+                            ) : null}
                             {row.status === "draft" ? (
                               <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(row)}>
                                 <Trash2 /> Delete draft

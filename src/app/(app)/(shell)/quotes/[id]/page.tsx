@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MapPin } from "lucide-react";
 import { z } from "zod";
+import { CreateInvoiceButton } from "@/components/invoices/create-invoice-button";
 import { QuoteActions } from "@/components/quotes/quote-actions";
 import { TotalsBlock } from "@/components/quotes/totals-block";
 import { Card } from "@/components/ui/card";
@@ -38,7 +39,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
     .maybeSingle();
   if (!quote) notFound();
 
-  const [{ data: items }, { data: activity }, photos] = await Promise.all([
+  const [{ data: items }, { data: activity }, photos, { data: linkedInvoices }] = await Promise.all([
     supabase.from("quote_items").select("*").eq("quote_id", id).order("position"),
     supabase
       .from("activity")
@@ -49,7 +50,9 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
       .order("created_at", { ascending: false })
       .limit(50),
     loadPhotos(business.id, id),
+    supabase.from("invoices").select("id, number").eq("quote_id", id).eq("business_id", business.id).neq("status", "void").limit(1),
   ]);
+  const linkedInvoice = linkedInvoices?.[0] ?? null;
 
   const { data: counter } = await supabase
     .from("usage_counters")
@@ -207,6 +210,25 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
                   {quote.decline_reason ? <span className="mt-1 block text-text-muted">Reason: {quote.decline_reason}</span> : null}
                 </p>
               )}
+            </Card>
+          ) : null}
+
+          {quote.status === "accepted" || linkedInvoice ? (
+            <Card>
+              <h2 className="text-h2 mb-2">Invoice</h2>
+              {linkedInvoice ? (
+                <p className="text-body mb-3">
+                  Invoiced as{" "}
+                  <Link href={`/invoices/${linkedInvoice.id}`} className="font-medium text-accent hover:underline">
+                    #{business.invoice_prefix}
+                    {linkedInvoice.number}
+                  </Link>
+                  .
+                </p>
+              ) : (
+                <p className="text-body mb-3 text-text-muted">Accepted. Turn it into an invoice in one tap.</p>
+              )}
+              <CreateInvoiceButton quoteId={quote.id} word={word} existingInvoiceId={linkedInvoice?.id ?? null} className="w-full" />
             </Card>
           ) : null}
 

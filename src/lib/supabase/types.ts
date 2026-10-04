@@ -1,5 +1,5 @@
 /**
- * Database types, hand-written to match supabase/migrations/001-004 exactly.
+ * Database types, hand-written to match supabase/migrations/001-009 exactly.
  *
  * Regenerate from your live database with:
  *   supabase gen types typescript --project-id <id> > src/lib/supabase/types.ts
@@ -20,7 +20,7 @@ type ItemType = "labour" | "material" | "fee";
 type ItemUnit = "job" | "hour" | "item" | "m2" | "m" | "day";
 type QuoteStatus = "draft" | "sent" | "viewed" | "accepted" | "declined" | "expired";
 type InvoiceStatus = "draft" | "sent" | "viewed" | "paid" | "void";
-type PaymentMethod = "cash" | "card" | "bank_transfer" | "other";
+type PaymentMethod = "cash" | "card" | "bank_transfer" | "cheque" | "other";
 type PhotoKind = "before" | "after" | "other";
 type ActivityEntity = "quote" | "invoice" | "customer";
 
@@ -155,6 +155,7 @@ type InvoiceRow = {
   customer_id: string | null;
   quote_id: string | null;
   number: number;
+  title: string | null;
   status: InvoiceStatus;
   issue_date: string;
   due_date: string;
@@ -187,6 +188,18 @@ type InvoiceItemRow = {
   amount_cents: number;
   price_item_id: string | null;
   needs_price: boolean;
+};
+
+type InvoicePaymentRow = {
+  id: string;
+  created_at: string;
+  invoice_id: string;
+  business_id: string;
+  amount_cents: number;
+  method: PaymentMethod;
+  paid_on: string;
+  note: string | null;
+  idempotency_key: string | null;
 };
 
 type JobPhotoRow = {
@@ -320,7 +333,7 @@ export type Database = {
         Insert: Insertable<
           InvoiceRow,
           | Common
-          | "customer_id" | "quote_id" | "status" | "issue_date" | "due_date" | "notes"
+          | "customer_id" | "quote_id" | "title" | "status" | "issue_date" | "due_date" | "notes"
           | "subtotal_cents" | "tax_cents" | "total_cents" | "amount_paid_cents" | "tax_rate_bps" | "public_token"
           | "sent_at" | "viewed_at" | "paid_at" | "payment_method" | "reminder_count" | "last_reminder_at"
         >;
@@ -341,6 +354,15 @@ export type Database = {
         Relationships: [
           Rel<"invoice_items", "invoice_id", "invoices">,
           Rel<"invoice_items", "price_item_id", "price_items">,
+        ];
+      };
+      invoice_payments: {
+        Row: InvoicePaymentRow;
+        Insert: Insertable<InvoicePaymentRow, "id" | "created_at" | "note" | "idempotency_key">;
+        Update: Partial<InvoicePaymentRow>;
+        Relationships: [
+          Rel<"invoice_payments", "invoice_id", "invoices">,
+          Rel<"invoice_payments", "business_id", "businesses">,
         ];
       };
       job_photos: {
@@ -393,6 +415,41 @@ export type Database = {
       save_quote: {
         Args: { p_quote_id: string; p_fields: Json; p_items: Json };
         Returns: undefined;
+      };
+      save_invoice: {
+        Args: { p_invoice_id: string; p_fields: Json; p_items: Json };
+        Returns: undefined;
+      };
+      record_invoice_payment: {
+        Args: {
+          p_invoice_id: string;
+          p_amount_cents: number;
+          p_method: string;
+          p_paid_on: string;
+          p_note: string | null;
+          p_idempotency_key: string | null;
+        };
+        Returns: Json;
+      };
+      void_invoice: {
+        Args: { p_invoice_id: string; p_reason: string | null };
+        Returns: undefined;
+      };
+      create_invoice_from_quote: {
+        Args: { p_quote_id: string };
+        Returns: Json;
+      };
+      get_public_invoice: {
+        Args: { p_token: string };
+        Returns: Json | null;
+      };
+      record_invoice_view: {
+        Args: { p_token: string };
+        Returns: boolean;
+      };
+      invoice_derived_status: {
+        Args: { p_status: string; p_due_date: string; p_tz: string; p_total: number; p_paid: number };
+        Returns: string;
       };
       increment_ai_drafts: {
         Args: { p_business_id: string; p_period: string; p_limit: number };
