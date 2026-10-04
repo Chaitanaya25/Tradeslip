@@ -577,6 +577,50 @@ describe.skipIf(!configured)("Row Level Security", () => {
     });
   });
 
+  describe("dashboard, search and customers (Phase 7)", () => {
+    it("customer_summary and global_search return nothing for another business", async () => {
+      const summary = await b.db.rpc("customer_summary", { p_business_id: a.businessId });
+      expect(summary.data ?? []).toHaveLength(0);
+      const search = await b.db.rpc("global_search", { p_business_id: a.businessId, p_query: "Customer", p_limit: 5 });
+      expect(search.data ?? []).toHaveLength(0);
+      const own = await a.db.rpc("global_search", { p_business_id: a.businessId, p_query: "Customer", p_limit: 5 });
+      expect((own.data ?? []).some((r) => r.kind === "customer")).toBe(true);
+    });
+
+    it("global_search treats % and _ literally", async () => {
+      const result = await a.db.rpc("global_search", { p_business_id: a.businessId, p_query: "%%", p_limit: 5 });
+      expect(result.error).toBeNull();
+      expect(result.data ?? []).toHaveLength(0);
+    });
+
+    it("customer_summary reports each own customer once", async () => {
+      const own = await a.db.rpc("customer_summary", { p_business_id: a.businessId });
+      expect(own.error).toBeNull();
+      expect((own.data ?? []).filter((r) => r.customer_id === a.customerId)).toHaveLength(1);
+    });
+
+    it("a customer cannot be edited or archived from another business", async () => {
+      await b.db.from("customers").update({ name: "Hijacked", archived: true }).eq("id", a.customerId);
+      const row = await admin.from("customers").select("name, archived").eq("id", a.customerId).single();
+      expect(row.data?.name).not.toBe("Hijacked");
+      expect(row.data?.archived).toBe(false);
+    });
+
+    it("the schedule of an accepted quote cannot be set by another business", async () => {
+      await admin.from("quotes").update({ status: "accepted" }).eq("id", a.quoteId);
+      await b.db.from("quotes").update({ scheduled_for: new Date().toISOString() }).eq("id", a.quoteId);
+      const row = await admin.from("quotes").select("scheduled_for").eq("id", a.quoteId).single();
+      expect(row.data?.scheduled_for).toBeNull();
+    });
+
+    it("anonymous clients cannot call the dashboard functions", async () => {
+      const anon = newClient(anonKey!);
+      expect((await anon.rpc("customer_summary", { p_business_id: a.businessId })).error).not.toBeNull();
+      expect((await anon.rpc("global_search", { p_business_id: a.businessId, p_query: "Customer", p_limit: 5 })).error).not.toBeNull();
+      expect((await anon.rpc("monthly_invoice_totals", { p_business_id: a.businessId, p_months: 6 })).error).not.toBeNull();
+    });
+  });
+
   describe("server-controlled data", () => {
     it("an owner cannot change their own plan or billing columns", async () => {
       await a.db.from("businesses").update({ plan: "business", paddle_subscription_id: "sub_fake" }).eq("id", a.businessId);

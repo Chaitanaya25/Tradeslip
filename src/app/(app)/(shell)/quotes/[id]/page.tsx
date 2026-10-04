@@ -4,6 +4,7 @@ import { ArrowLeft, MapPin } from "lucide-react";
 import { z } from "zod";
 import { CreateInvoiceButton } from "@/components/invoices/create-invoice-button";
 import { QuoteActions } from "@/components/quotes/quote-actions";
+import { ScheduleField } from "@/components/quotes/schedule-field";
 import { TotalsBlock } from "@/components/quotes/totals-block";
 import { Card } from "@/components/ui/card";
 import { StatusPill, type Status } from "@/components/ui/status-pill";
@@ -13,6 +14,7 @@ import { formatMoney } from "@/lib/money";
 import { formatBpsAsPercent } from "@/lib/money-input";
 import { quoteSendLimit, quoteSendsRemaining, usagePeriod } from "@/lib/plans";
 import { buildPublicUrl } from "@/lib/share-links";
+import { utcToZonedParts } from "@/lib/schedule";
 import { depositCents } from "@/lib/quote-calc";
 import { describeActivity } from "@/lib/quote-helpers";
 import { loadPhotos } from "@/lib/quote-queries";
@@ -230,6 +232,14 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
               )}
               <CreateInvoiceButton quoteId={quote.id} word={word} existingInvoiceId={linkedInvoice?.id ?? null} className="w-full" />
             </Card>
+          ) : null}
+
+          {quote.status === "accepted" ? (
+            <ScheduleField
+              quoteId={quote.id}
+              initial={quote.scheduled_for ? utcToZonedParts(quote.scheduled_for, business.timezone) : null}
+              timezone={business.timezone}
+            />
           ) : null}
 
           <QuoteActions

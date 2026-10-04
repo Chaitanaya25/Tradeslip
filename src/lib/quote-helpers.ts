@@ -192,6 +192,8 @@ export function describeActivity(event: string, meta: Meta, quoteWord: string): 
       return `Link shared${typeof meta?.via === "string" ? ` by ${meta.via === "sms" ? "text message" : meta.via}` : ""}`;
     case "quote.link_regenerated":
       return "New link created. The old link stopped working";
+    case "quote.scheduled":
+      return typeof meta?.when === "string" ? `Job scheduled for ${meta.when}` : "Job schedule cleared";
     case "quote.followup_sent":
       return "Follow-up reminder sent";
     default:

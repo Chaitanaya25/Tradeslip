@@ -1,5 +1,5 @@
 /**
- * Database types, hand-written to match supabase/migrations/001-009 exactly.
+ * Database types, hand-written to match supabase/migrations/001-010 exactly.
  *
  * Regenerate from your live database with:
  *   supabase gen types typescript --project-id <id> > src/lib/supabase/types.ts
@@ -80,6 +80,7 @@ type CustomerRow = {
   region: string | null;
   postcode: string | null;
   notes: string | null;
+  archived: boolean;
 };
 
 type PriceItemRow = {
@@ -287,7 +288,7 @@ export type Database = {
         Row: CustomerRow;
         Insert: Insertable<
           CustomerRow,
-          Common | "email" | "phone" | "address_line1" | "city" | "region" | "postcode" | "notes"
+          Common | "email" | "phone" | "address_line1" | "city" | "region" | "postcode" | "notes" | "archived"
         >;
         Update: Partial<CustomerRow>;
         Relationships: [Rel<"customers", "business_id", "businesses">];
@@ -510,6 +511,34 @@ export type Database = {
           paid_last_month_cents: number;
           overdue_count: number;
           overdue_cents: number;
+        }[];
+      };
+      customer_summary: {
+        Args: { p_business_id: string };
+        Returns: {
+          customer_id: string;
+          quote_count: number;
+          invoice_count: number;
+          total_paid_cents: number;
+          outstanding_cents: number;
+          last_activity_at: string | null;
+        }[];
+      };
+      global_search: {
+        Args: { p_business_id: string; p_query: string; p_limit?: number };
+        Returns: {
+          kind: "customer" | "quote" | "invoice";
+          id: string;
+          title: string;
+          subtitle: string | null;
+          status: string | null;
+          amount_cents: number | null;
+          amount_paid_cents: number | null;
+          due_date: string | null;
+          valid_until: string | null;
+          number: number | null;
+          archived: boolean;
+          rank: number;
         }[];
       };
       monthly_invoice_totals: {

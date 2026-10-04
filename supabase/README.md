@@ -15,9 +15,10 @@ All schema lives in plain SQL files. You do not need Docker or `supabase start`.
 | `migrations/007_public_quotes.sql` | Customer link functions: `get_public_quote`, view / accept / decline, free-plan send counter (service role only) |
 | `migrations/008_accept_otp.sql` | Emailed 6-digit code before a customer can accept (`issue_accept_otp`, `accept_quote_verified`), `accepted_verified` flag |
 | `migrations/009_invoices.sql` | Invoices: `invoice_payments`, `save_invoice`, `record_invoice_payment`, `void_invoice`, `create_invoice_from_quote`, public invoice link (`get_public_invoice`, `record_invoice_view`), tamper guards, payment-based `dashboard_stats` |
+| `migrations/010_dashboard_customers.sql` | `customers.archived`, dashboard / list indexes, payment-based `monthly_invoice_totals`, `customer_summary`, `global_search` |
 | `seed.sql` | `seed_demo_data(owner uuid)` — demo business "Miller Plumbing" |
 
-Run them **in this order: 001, 002, 003, 004, 005, 006, 007, 008, 009, then seed.sql.** Each file is safe to run twice.
+Run them **in this order: 001, 002, 003, 004, 005, 006, 007, 008, 009, 010, then seed.sql.** Each file is safe to run twice.
 
 ## Option A — SQL editor (simplest)
 
@@ -87,7 +88,7 @@ user B's businesses, customers, quotes or quote items. It creates and deletes us
 **Use a separate throwaway Supabase project for this. Never point it at your main project.**
 
 1. Create a new empty Supabase project.
-2. Run migrations 001–009 on it.
+2. Run migrations 001–010 on it.
 3. Create `.env.test.local` in the repo root:
 
 ```

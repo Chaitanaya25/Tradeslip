@@ -39,13 +39,13 @@ export function CreateInvoiceButton({
   quoteId: string;
   word: string;
   existingInvoiceId: string | null;
-  variant?: "primary" | "secondary";
+  variant?: "primary" | "secondary" | "outline-accent";
   className?: string;
 }) {
   const { create, pending } = useCreateFromQuote(quoteId, word);
   if (existingInvoiceId) {
     return (
-      <Button asChild variant="secondary" className={className}>
+      <Button asChild variant={variant === "outline-accent" ? "outline-accent" : "secondary"} className={className}>
         <Link href={`/invoices/${existingInvoiceId}`}>
           <FileText /> View invoice
         </Link>

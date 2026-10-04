@@ -1,15 +1,15 @@
 import { QuoteBuilder } from "@/components/quotes/quote-builder";
 import { requireBusiness } from "@/lib/auth/session";
 import { defaultValidUntil, todayInTimezone } from "@/lib/quote-calc";
-import { aiDraftingAvailable, builderConfig, loadBuilderOptions } from "@/lib/quote-queries";
-import { emptyCustomer, emptyItem } from "@/lib/schemas/quote";
+import { aiDraftingAvailable, builderConfig, loadBuilderOptions, loadPrefillCustomer } from "@/lib/quote-queries";
+import { emptyItem } from "@/lib/schemas/quote";
 
 export const metadata = { title: "New quote · Tradeslip" };
 
-export default async function NewQuotePage({ searchParams }: { searchParams: Promise<{ record?: string }> }) {
-  const { record } = await searchParams;
+export default async function NewQuotePage({ searchParams }: { searchParams: Promise<{ record?: string; customerId?: string }> }) {
+  const { record, customerId } = await searchParams;
   const business = await requireBusiness();
-  const { customers, priceItems } = await loadBuilderOptions(business.id);
+  const [{ customers, priceItems }, customer] = await Promise.all([loadBuilderOptions(business.id), loadPrefillCustomer(business.id, customerId)]);
 
   return (
     <QuoteBuilder
@@ -24,7 +24,7 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
       autoRecord={record === "1"}
       voiceAudioUrl={null}
       initialValues={{
-        customer: emptyCustomer(),
+        customer,
         title: "",
         notes: "",
         valid_until: defaultValidUntil(todayInTimezone(business.timezone), business.quote_validity_days),

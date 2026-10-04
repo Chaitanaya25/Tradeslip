@@ -63,9 +63,9 @@ Work top to bottom. One task at a time. After each: `pnpm typecheck && pnpm lint
 - [x] Invoice email template.
 
 ## Phase 7 — Dashboard & customers (Day 27–29)
-- [ ] Dashboard matching `01-dashboard.png`: stat cards (`dashboard_stats`), recent activity, needs attention, invoices chart, quick actions, today's schedule (hide if empty).
-- [ ] Global search (customers, quotes, invoices).
-- [ ] Customers list + detail with history and contact buttons.
+- [x] Dashboard matching `01-dashboard.png`: stat cards (`dashboard_stats`), recent activity, needs attention, invoices chart, quick actions, today's schedule (hide if empty).
+- [x] Global search (customers, quotes, invoices).
+- [x] Customers list + detail with history and contact buttons.
 
 ## Phase 8 — Reminders (Day 30–31)
 - [ ] `/api/cron/reminders` per ARCHITECTURE §9 (expire, follow-up, invoice reminders, local-hours window, idempotent).
@@ -152,3 +152,11 @@ _Record ambiguous choices here with date and one-line reason._
 - 2026-10-04 (Phase 6) Create-from-quote navigation is client side (`CreateInvoiceButton`, and `/invoices/new?quoteId=` which runs the same action once), because a server component cannot revalidate paths while rendering. The "already exists" case shows the toast and opens the existing invoice.
 - 2026-10-04 (Phase 6) Photos are skipped on invoices (`JobPhotos` is bound to quotes); the builder has no voice card or deposit toggle. Invoice PDF filename is `Invoice-{number}.pdf` without the prefix. Public page shows "Pay now" only when the business has a payment link and a balance is owed; Tradeslip never handles customer card payments.
 - 2026-10-04 (Phase 6) Shared code instead of copies: `server/customer-resolver.ts` (customer upsert + number allocation), `schemas/document-parts.ts` (customer and item fields/checks), `SendSheet` takes `onEmail`/`onShared`, `components/public/document-parts.tsx`, `server/pdf/doc-parts.tsx`. No new dependencies.
+- 2026-10-05 (Phase 7) Migration `010_dashboard_customers.sql` (run it): `customers.archived`, indexes, payment-based `monthly_invoice_totals`, `customer_summary`, `global_search` (all SECURITY INVOKER). `seed.sql` now also writes one payment row per seeded paid invoice so the demo dashboard matches `amount_paid_cents`.
+- 2026-10-05 (Phase 7) Fix: `monthly_invoice_totals` (003) summed `amount_paid_cents` by invoice issue month, which disagreed with `dashboard_stats` (payments by `paid_on`). Paid is now payments by `paid_on` month (void excluded); outstanding is the balance of sent/viewed invoices issued that month. The smoke test checks that this month's bar equals the dashboard's "Paid this month".
+- 2026-10-05 (Phase 7) Today's schedule uses accepted quotes only: invoices have no scheduled column and the brief did not ask for one. The job date and time are typed in the business timezone and stored as UTC (`zonedToUtc`, DST-safe); allowed from a year back to two years ahead.
+- 2026-10-05 (Phase 7) Dashboard date follows the region's locale ("Wednesday 14 October" UK/AU, "Wednesday, October 14" US) rather than one fixed order. Greeting: Morning before noon, Afternoon until 5pm, then Evening, by the business-local hour. Paid-this-month delta is hidden when last month is 0; a drop shows a red down arrow.
+- 2026-10-05 (Phase 7) Needs attention order: overdue invoices (oldest due first), quotes expiring today/tomorrow, quotes with no reply after 3 days, accepted quotes with no invoice; a quote is listed once under its most urgent reason; cap 5. "Send reminder" and "Send follow up" open the normal Send sheet (the owner chooses email / text / WhatsApp); nothing is automated.
+- 2026-10-05 (Phase 7) Search statuses are derived in TypeScript from raw columns (`derivedStatus`, `effectiveStatus`), not in SQL, so there is one definition. Search is tokenised: every word must match; `%`, `_` and `\` are escaped; under 2 characters returns nothing; nothing is stored.
+- 2026-10-05 (Phase 7) Chart range select (3 / 6 / 12 months) slices 12 months loaded once, so changing it needs no request. Dashboard cards load in separate Suspense boundaries and fail independently.
+- 2026-10-05 (Phase 7) Customers: Archive hides a customer from lists and pickers but keeps their documents; Delete is offered only with no history (checked in the action). `resolveCustomer` still matches archived customers by name + phone/postcode so a document never silently creates a duplicate. `?customerId=` on the new quote / invoice pages is validated against the business and ignores archived customers.

@@ -1,6 +1,8 @@
 import "server-only";
 import type { BuilderConfig, CustomerOption, PriceItemOption } from "@/components/quotes/types";
 import { REGIONS, quoteWord } from "@/lib/region";
+import { emptyCustomer, type QuoteFormValues } from "@/lib/schemas/quote";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import type { Business } from "@/lib/supabase/tables";
 import type { PhotoDto } from "@/server/actions/quote-photos";
@@ -20,7 +22,7 @@ export function builderConfig(business: Business): BuilderConfig {
   };
 }
 
-/** Customers and active price-book items for the builder's pickers. */
+/** Customers (not archived) and active price-book items for the builder's pickers. */
 export async function loadBuilderOptions(businessId: string) {
   const supabase = await createClient();
   const [customers, priceItems] = await Promise.all([
@@ -28,6 +30,7 @@ export async function loadBuilderOptions(businessId: string) {
       .from("customers")
       .select("id, name, email, phone, address_line1, city, region, postcode")
       .eq("business_id", businessId)
+      .eq("archived", false)
       .order("name")
       .limit(1000),
     supabase
@@ -75,4 +78,31 @@ export async function voiceNoteUrl(path: string | null): Promise<string | null> 
   const supabase = await createClient();
   const { data } = await supabase.storage.from("voice-notes").createSignedUrl(path, 60 * 60);
   return data?.signedUrl ?? null;
+}
+
+/**
+ * Customer details for `?customerId=` on the new quote / invoice pages. The id is validated against the
+ * signed-in business (RLS plus an explicit business filter) and archived customers are refused.
+ */
+export async function loadPrefillCustomer(businessId: string, customerId: string | undefined): Promise<QuoteFormValues["customer"]> {
+  if (!customerId || !z.uuid().safeParse(customerId).success) return emptyCustomer();
+  const supabase = await createClient();
+  const { data: c } = await supabase
+    .from("customers")
+    .select("id, name, email, phone, address_line1, city, region, postcode")
+    .eq("id", customerId)
+    .eq("business_id", businessId)
+    .eq("archived", false)
+    .maybeSingle();
+  if (!c) return emptyCustomer();
+  return {
+    customer_id: c.id,
+    name: c.name,
+    email: c.email ?? "",
+    phone: c.phone ?? "",
+    address_line1: c.address_line1 ?? "",
+    city: c.city ?? "",
+    region: c.region ?? "",
+    postcode: c.postcode ?? "",
+  };
 }

@@ -444,6 +444,18 @@ begin
     (biz, 'invoice', i_mark,   'invoice.sent',            '{"via":"email"}',                 now() - interval '2 days'),
     (biz, 'customer', c_tom,   'customer.created',        '{}',                              now() - interval '30 days');
 
+  -- Payments (migration 009+): one row per invoice that shows money received, so the
+  -- dashboard's payment-based figures match amount_paid_cents.
+  if to_regclass('public.invoice_payments') is not null then
+    insert into public.invoice_payments (invoice_id, business_id, amount_cents, method, paid_on, note, idempotency_key)
+    select i.id, i.business_id, i.amount_paid_cents, coalesce(i.payment_method, 'bank_transfer'),
+           coalesce(i.paid_at at time zone tz, now() at time zone tz)::date - case when i.paid_at is null then 3 else 0 end,
+           'Demo data', 'seed'
+      from public.invoices i
+     where i.business_id = biz and i.amount_paid_cents > 0
+    on conflict do nothing;
+  end if;
+
   -- Usage this month ---------------------------------------------------
   insert into public.usage_counters (business_id, period, quotes_sent, ai_drafts)
   values (biz, to_char(now() at time zone tz, 'YYYY-MM'), 5, 3)
