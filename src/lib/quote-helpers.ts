@@ -175,7 +175,9 @@ export function describeActivity(event: string, meta: Meta, quoteWord: string): 
     case "quote.viewed":
       return `${word} viewed by customer`;
     case "quote.accepted":
-      return `${word} accepted${typeof meta?.name === "string" ? ` by ${meta.name}` : ""}`;
+      return `${word} accepted${typeof meta?.name === "string" ? ` by ${meta.name}` : ""}${
+        meta?.verified === true ? " (verified by email)" : meta?.verified === false ? " (not verified)" : ""
+      }`;
     case "quote.declined":
       return `${word} declined${typeof meta?.reason === "string" && meta.reason ? `: ${meta.reason}` : ""}`;
     case "quote.resent":

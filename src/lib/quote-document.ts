@@ -35,6 +35,14 @@ export function pdfSafeLogoUrl(url: string | null): string | null {
   return url && /\.(png|jpe?g)(\?|$)/i.test(url) ? url : null;
 }
 
+/** "Miller Plumbing" -> "MP", "Dave" -> "DA". Up to two letters, from the first two words. */
+export function monogramFor(name: string): string {
+  const words = name.trim().split(/\s+/).filter((w) => /[a-z0-9]/i.test(w));
+  if (words.length === 0) return "T";
+  const letters = words.length > 1 ? words[0][0] + words[1][0] : words[0].slice(0, 2);
+  return letters.toUpperCase();
+}
+
 export function qtyText(qty: number): string {
   return Number.isInteger(qty) ? String(qty) : String(Number(qty.toFixed(2)));
 }
@@ -58,7 +66,7 @@ export function buildQuoteDocument(
     validUntil: quote.valid_until ? formatDateOnly(quote.valid_until, locale) : null,
     business: {
       name: business.name,
-      monogram: business.name.trim().slice(0, 2).toUpperCase() || "T",
+      monogram: monogramFor(business.name),
       logoUrl: pdfSafeLogoUrl(extra.logoUrl),
       contactLine: [business.phone, business.email].filter(Boolean).join("  ·  "),
       licenceLine: business.tax_number ? `${business.tax_label === "Sales tax" ? "Tax ID" : business.tax_label}: ${business.tax_number}` : null,

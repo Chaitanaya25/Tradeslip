@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { isPublicQuote, type PublicQuote } from "@/lib/public-quote";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -75,4 +76,30 @@ export async function getOwnerNotificationTarget(token: string) {
   ]);
   if (!business) return null;
   return { quote, business, customerName: customer?.name ?? null };
+}
+
+/** Server-only facts for emailing an acceptance code. Includes the customer's email, which must never reach a browser. */
+export type AcceptTarget = {
+  email: string | null;
+  customer_name: string | null;
+  business_name: string;
+  business_email: string | null;
+  logo_path: string | null;
+  country: "US" | "UK" | "AU";
+  number: number;
+  number_prefix: string;
+};
+
+export async function getAcceptTarget(token: string): Promise<AcceptTarget | null> {
+  if (!isWellFormedToken(token)) return null;
+  const { data, error } = await createAdminClient().rpc("get_accept_target", { p_token: token });
+  if (error || !data || typeof data !== "object" || Array.isArray(data)) return null;
+  return data as unknown as AcceptTarget;
+}
+
+/** Is the request coming from the signed-in owner of this quote? (Used to stop owners accepting their own quote.) */
+export async function requestIsOwner(token: string): Promise<boolean> {
+  const jar = await cookies();
+  const hasSession = jar.getAll().some((c) => c.name.startsWith("sb-"));
+  return visitorOwnsQuote(token, hasSession);
 }

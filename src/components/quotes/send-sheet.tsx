@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Copy, Mail, MessageCircle, MessageSquare } from "lucide-react";
+import { CircleAlert, CircleCheck, Copy, Mail, MessageCircle, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
-import { buildShareMessage, normalizePhoneDigits, smsLink, whatsappLink } from "@/lib/share-links";
+import { EMAIL_DELIVERED } from "@/lib/email-errors";
 import type { Country } from "@/lib/region";
+import { buildShareMessage, normalizePhoneDigits, smsLink, whatsappLink } from "@/lib/share-links";
 import { logQuoteShared, sendQuoteEmail, type SendUsage } from "@/server/actions/quote-sending";
 
 export type SendSheetProps = {
@@ -22,14 +23,43 @@ export type SendSheetProps = {
   /** "Estimate" or "Quote". */
   quoteWord: string;
   usage: SendUsage | null;
-  /** True right after the first send, so the heading can say it is on its way. */
+  /** True right after the first send, so the sheet can say the quote is now marked Sent. */
   justSent: boolean;
 };
 
-/** Share a sent quote: copy the link, email it, or open a prefilled text message / WhatsApp chat. */
+type Delivery = { status: "idle" } | { status: "sending" } | { status: "sent"; message: string } | { status: "error"; message: string };
+
+/** One line of per-action feedback under a delivery button. */
+function DeliveryNote({ delivery }: { delivery: Delivery }) {
+  if (delivery.status === "sent") {
+    return (
+      <p role="status" className="text-small mt-2 flex gap-2 text-status-good-text">
+        <CircleCheck className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+        {delivery.message}
+      </p>
+    );
+  }
+  if (delivery.status === "error") {
+    return (
+      <p role="alert" className="text-small mt-2 flex gap-2 text-destructive">
+        <CircleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+        {delivery.message}
+      </p>
+    );
+  }
+  return null;
+}
+
+/**
+ * Share a sent quote. Opening this sheet is what marks the quote as Sent. Copying the
+ * link, emailing it, and the text / WhatsApp buttons are separate delivery actions, each
+ * with its own result, so nothing here claims a message arrived when it may not have.
+ */
 export function SendSheet({ open, onOpenChange, quoteId, link, customer, businessName, country, quoteWord, usage, justSent }: SendSheetProps) {
   const toast = useToast();
   const [email, setEmail] = useState(customer.email ?? "");
+  const [emailDelivery, setEmailDelivery] = useState<Delivery>({ status: "idle" });
+  const [phoneOpened, setPhoneOpened] = useState<{ sms: boolean; whatsapp: boolean }>({ sms: false, whatsapp: false });
   const [pending, startTransition] = useTransition();
   const word = quoteWord.toLowerCase();
 
@@ -48,15 +78,22 @@ export function SendSheet({ open, onOpenChange, quoteId, link, customer, busines
   }
 
   function sendEmail() {
+    setEmailDelivery({ status: "sending" });
     startTransition(async () => {
       const result = await sendQuoteEmail(quoteId, email.trim() || undefined);
-      if (result.ok) toast.success("Email sent.");
-      else toast.error(result.message);
+      if (result.ok) {
+        setEmailDelivery({ status: "sent", message: EMAIL_DELIVERED });
+        toast.success("Email sent.");
+      } else {
+        setEmailDelivery({ status: "error", message: result.message });
+        toast.error(result.message);
+      }
     });
   }
 
   function shared(channel: "sms" | "whatsapp") {
-    // The message itself is sent from the owner's phone; we only note that it was shared.
+    // The message itself is sent from the owner's phone; we only note that it was opened.
+    setPhoneOpened((current) => ({ ...current, [channel]: true }));
     void logQuoteShared(quoteId, channel);
   }
 
@@ -64,11 +101,11 @@ export function SendSheet({ open, onOpenChange, quoteId, link, customer, busines
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="data-[side=right]:w-full data-[side=right]:sm:max-w-md">
         <SheetHeader>
-          <SheetTitle className="text-h2">{justSent ? `${quoteWord} sent` : `Share ${word}`}</SheetTitle>
+          <SheetTitle className="text-h2">{justSent ? `${quoteWord} marked as Sent` : `Share ${word}`}</SheetTitle>
           <SheetDescription className="text-body text-text-muted">
             {justSent
-              ? "It's ready for your customer. Share the link however suits them."
-              : "Send the link again or copy it."}
+              ? `Opening this marked the ${word} as Sent. Nothing has been delivered yet: email, text message and WhatsApp below are separate steps.`
+              : "Email, text message and WhatsApp are separate ways to deliver the link. Each shows its own result."}
           </SheetDescription>
         </SheetHeader>
 
@@ -93,13 +130,17 @@ export function SendSheet({ open, onOpenChange, quoteId, link, customer, busines
                 autoComplete="off"
                 placeholder="customer@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setEmailDelivery({ status: "idle" });
+                }}
               />
               <Button type="button" onClick={sendEmail} disabled={pending || !email.trim()}>
-                <Mail /> {pending ? "Sending..." : "Send"}
+                <Mail /> {emailDelivery.status === "sending" ? "Sending..." : "Send"}
               </Button>
             </div>
             {!email.trim() ? <p className="text-small mt-1.5 text-text-muted">Add an email address to send it by email.</p> : null}
+            <DeliveryNote delivery={emailDelivery} />
           </div>
 
           {sms || whatsapp ? (
@@ -107,18 +148,24 @@ export function SendSheet({ open, onOpenChange, quoteId, link, customer, busines
               <p className="text-label mb-2 text-text-muted">Share from your phone</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {sms ? (
-                  <Button asChild variant="secondary">
-                    <a href={sms} onClick={() => shared("sms")}>
-                      <MessageSquare /> Text message
-                    </a>
-                  </Button>
+                  <div>
+                    <Button asChild variant="secondary" className="w-full">
+                      <a href={sms} onClick={() => shared("sms")}>
+                        <MessageSquare /> Text message
+                      </a>
+                    </Button>
+                    {phoneOpened.sms ? <p className="text-small mt-2 text-text-muted">Opened on your phone. We can&apos;t tell if it was sent.</p> : null}
+                  </div>
                 ) : null}
                 {whatsapp ? (
-                  <Button asChild variant="secondary">
-                    <a href={whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => shared("whatsapp")}>
-                      <MessageCircle /> WhatsApp
-                    </a>
-                  </Button>
+                  <div>
+                    <Button asChild variant="secondary" className="w-full">
+                      <a href={whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => shared("whatsapp")}>
+                        <MessageCircle /> WhatsApp
+                      </a>
+                    </Button>
+                    {phoneOpened.whatsapp ? <p className="text-small mt-2 text-text-muted">Opened in WhatsApp. We can&apos;t tell if it was sent.</p> : null}
+                  </div>
                 ) : null}
               </div>
             </div>

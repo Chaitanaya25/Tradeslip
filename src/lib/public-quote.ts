@@ -21,6 +21,10 @@ export type PublicQuote = {
     tax_rate_bps: number;
     accepted_at: string | null;
     accepted_name: string | null;
+    /** True when the customer entered a code emailed to the address on file. */
+    accepted_verified: boolean;
+    /** True when the customer has an email on file, so accepting needs an emailed code. */
+    requires_verification: boolean;
     declined_at: string | null;
     decline_reason: string | null;
   };

@@ -124,6 +124,7 @@ type QuoteRow = {
   accepted_name: string | null;
   accepted_ip: string | null;
   accepted_user_agent: string | null;
+  accepted_verified: boolean;
   declined_at: string | null;
   decline_reason: string | null;
   followup_count: number;
@@ -221,6 +222,16 @@ type UsageCounterRow = {
   ai_drafts: number;
 };
 
+type AcceptOtpRow = {
+  id: string;
+  quote_id: string;
+  code_hash: string;
+  expires_at: string;
+  attempts: number;
+  used_at: string | null;
+  created_at: string;
+};
+
 type RateLimitRow = {
   id: string;
   created_at: string;
@@ -283,7 +294,7 @@ export type Database = {
           | "deposit_enabled" | "deposit_bps" | "include_photos"
           | "subtotal_cents" | "tax_cents" | "total_cents" | "tax_rate_bps" | "public_token"
           | "voice_note_path" | "transcript" | "sent_at" | "viewed_at" | "accepted_at" | "accepted_name"
-          | "accepted_ip" | "accepted_user_agent" | "declined_at" | "decline_reason"
+          | "accepted_ip" | "accepted_user_agent" | "accepted_verified" | "declined_at" | "decline_reason"
           | "followup_count" | "last_followup_at" | "scheduled_for"
         >;
         Update: Partial<QuoteRow>;
@@ -354,6 +365,12 @@ export type Database = {
         Update: Partial<UsageCounterRow>;
         Relationships: [Rel<"usage_counters", "business_id", "businesses">];
       };
+      quote_accept_otps: {
+        Row: AcceptOtpRow;
+        Insert: Insertable<AcceptOtpRow, "id" | "attempts" | "used_at" | "created_at">;
+        Update: Partial<AcceptOtpRow>;
+        Relationships: [Rel<"quote_accept_otps", "quote_id", "quotes">];
+      };
       rate_limits: {
         Row: RateLimitRow;
         Insert: Insertable<RateLimitRow, Common | "count">;
@@ -412,6 +429,18 @@ export type Database = {
       refund_quote_send: {
         Args: { p_business_id: string; p_period: string };
         Returns: undefined;
+      };
+      get_accept_target: {
+        Args: { p_token: string };
+        Returns: Json | null;
+      };
+      issue_accept_otp: {
+        Args: { p_token: string; p_code_hash: string };
+        Returns: string;
+      };
+      accept_quote_verified: {
+        Args: { p_token: string; p_name: string; p_code_hash: string; p_ip: string; p_ua: string };
+        Returns: { result: string; attempts_left: number | null }[];
       };
       dashboard_stats: {
         Args: { p_business_id: string };

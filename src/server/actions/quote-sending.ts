@@ -12,7 +12,8 @@ import { REGIONS, quoteWord } from "@/lib/region";
 import { buildPublicUrl } from "@/lib/share-links";
 import { logoPublicUrl } from "@/lib/supabase/storage";
 import { generatePublicToken } from "@/lib/tokens";
-import { sendEmail, isEmailConfigured, EMAIL_FAILED, EMAIL_NOT_CONFIGURED } from "@/server/email/send";
+import { EMAIL_MESSAGES } from "@/lib/email-errors";
+import { sendEmail, isEmailConfigured } from "@/server/email/send";
 import { QuoteToCustomerEmail } from "@/server/email/templates/quote-to-customer";
 import { refundQuoteSend, reserveQuoteSend } from "@/server/quote-usage";
 import { actionBusinessContext } from "./context";
@@ -159,7 +160,7 @@ export async function sendQuoteEmail(quoteId: string, to?: string): Promise<Acti
   const ctx = await actionBusinessContext();
   if (!ctx.ok) return ctx.error;
   if (!idSchema.safeParse(quoteId).success) return failure("That quote no longer exists.");
-  if (!isEmailConfigured()) return failure(EMAIL_NOT_CONFIGURED);
+  if (!isEmailConfigured()) return failure(EMAIL_MESSAGES.not_configured);
 
   const quote = await loadQuote(ctx, quoteId);
   if (!quote) return failure("That quote no longer exists.");
@@ -201,7 +202,8 @@ export async function sendQuoteEmail(quoteId: string, to?: string): Promise<Acti
       branding: business.plan === "trial" || business.plan === "free",
     }),
   });
-  if (!result.ok) return failure(result.reason === "not_configured" ? EMAIL_NOT_CONFIGURED : EMAIL_FAILED);
+  // Only a message Resend actually accepted counts as sent; the real reason is shown otherwise.
+  if (!result.ok) return failure(EMAIL_MESSAGES[result.reason]);
 
   await logActivity(ctx, quoteId, "quote.emailed");
   revalidate(quoteId);

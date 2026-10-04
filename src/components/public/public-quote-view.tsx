@@ -2,6 +2,7 @@ import { CircleCheck, MapPin } from "lucide-react";
 import { QuoteResponse } from "@/components/public/quote-response";
 import { Button } from "@/components/ui/button";
 import { formatDateOnly } from "@/lib/dates";
+import { monogramFor } from "@/lib/quote-document";
 import { formatMoney } from "@/lib/money";
 import { formatBpsAsPercent } from "@/lib/money-input";
 import { depositCents } from "@/lib/quote-calc";
@@ -20,7 +21,21 @@ function longDate(timestamp: string | null, locale: string, timeZone: string): s
 }
 
 /** The customer's page for a quote: mobile first, one 480px column. Server-rendered; only the buttons are client JS. */
-export function PublicQuoteView({ token, data, photos }: { token: string; data: PublicQuote; photos: SignedPhoto[] }) {
+export function PublicQuoteView({
+  token,
+  data,
+  photos,
+  maskedEmail,
+  isOwner,
+}: {
+  token: string;
+  data: PublicQuote;
+  photos: SignedPhoto[];
+  /** Masked address the acceptance code goes to (e.g. j***@gmail.com), or null when none is on file. */
+  maskedEmail: string | null;
+  /** The signed-in owner is looking at their own link. */
+  isOwner: boolean;
+}) {
   const { quote, business, customer } = data;
   const region = REGIONS[business.country];
   const locale = region.locale;
@@ -31,7 +46,7 @@ export function PublicQuoteView({ token, data, photos }: { token: string; data: 
   const address = formatCustomerAddress(customer);
   const deposit = quote.deposit_enabled ? depositCents(quote.total_cents, quote.deposit_bps) : null;
   const logoUrl = logoPublicUrl(business.logo_path);
-  const monogram = business.name.trim().slice(0, 2).toUpperCase() || "T";
+  const monogram = monogramFor(business.name);
 
   // "Ask a question": email if the business has one, otherwise a text message.
   const message = `Hi ${business.name}, I have a question about ${wordLower} #${number}.`;
@@ -223,7 +238,16 @@ export function PublicQuoteView({ token, data, photos }: { token: string; data: 
           </div>
         ) : null}
 
-        {open ? <QuoteResponse token={token} word={wordLower} askHref={askHref} /> : null}
+        {open ? (
+          <div className="space-y-3">
+            {isOwner ? (
+              <p role="status" className="rounded-lg bg-surface-muted p-4 text-[15px] leading-6 text-text-muted">
+                You are viewing this as the owner. Customers see the Accept button here.
+              </p>
+            ) : null}
+            <QuoteResponse token={token} word={wordLower} askHref={askHref} maskedEmail={quote.requires_verification ? maskedEmail : null} ownerPreview={isOwner} />
+          </div>
+        ) : null}
       </section>
 
       {business.plan_branding ? (

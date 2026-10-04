@@ -420,6 +420,54 @@ describe.skipIf(!configured)("Row Level Security", () => {
     });
   });
 
+  describe("acceptance codes (Phase 5.1)", () => {
+    const hash = "f".repeat(64);
+    let token: string;
+
+    beforeAll(async () => {
+      token = `o${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "")}`.slice(0, 48);
+      await admin.from("quotes").update({ status: "sent", public_token: token, sent_at: new Date().toISOString() }).eq("id", a.quoteId);
+    });
+
+    it("owners and anonymous clients cannot call any OTP function", async () => {
+      const anon = newClient(anonKey!);
+      for (const client of [a.db, b.db, anon]) {
+        expect((await client.rpc("issue_accept_otp", { p_token: token, p_code_hash: hash })).error).not.toBeNull();
+        expect((await client.rpc("accept_quote_verified", { p_token: token, p_name: "Eve Hacker", p_code_hash: hash, p_ip: "1.1.1.1", p_ua: "x" })).error).not.toBeNull();
+        expect((await client.rpc("get_accept_target", { p_token: token })).error).not.toBeNull();
+        expect((await client.rpc("accept_quote", { p_token: token, p_name: "Eve Hacker", p_ip: "1.1.1.1", p_ua: "x" })).error).not.toBeNull();
+      }
+    });
+
+    it("quote_accept_otps cannot be read or written by owners or anonymous clients", async () => {
+      const issued = await admin.rpc("issue_accept_otp", { p_token: token, p_code_hash: hash });
+      // The test customer has no email, so the service role is told "not_allowed": either way a row may or may not exist.
+      expect(["ok", "not_allowed"]).toContain(issued.data);
+
+      const anon = newClient(anonKey!);
+      for (const client of [a.db, b.db, anon]) {
+        const read = await client.from("quote_accept_otps").select("id");
+        expect(read.error !== null || (read.data ?? []).length === 0).toBe(true);
+        const write = await client.from("quote_accept_otps").insert({ quote_id: a.quoteId, code_hash: hash, expires_at: new Date(Date.now() + 600_000).toISOString() });
+        expect(write.error).not.toBeNull();
+      }
+    });
+
+    it("without a code, accepting is refused when the customer has an email on file", async () => {
+      await admin.from("customers").update({ email: "customer-a@example.com" }).eq("id", a.customerId);
+      const result = await admin.rpc("accept_quote", { p_token: token, p_name: "Sarah Thompson", p_ip: "203.0.113.9", p_ua: "test" });
+      expect(result.data).toBe("not_allowed");
+      const row = await admin.from("quotes").select("status").eq("id", a.quoteId).single();
+      expect(row.data?.status).toBe("sent");
+    });
+
+    it("the public JSON never contains the customer's email", async () => {
+      const { data } = await admin.rpc("get_public_quote", { p_token: token });
+      expect(JSON.stringify(data)).not.toContain("customer-a@example.com");
+      expect((data as { quote: { requires_verification: boolean } }).quote.requires_verification).toBe(true);
+    });
+  });
+
   describe("server-controlled data", () => {
     it("an owner cannot change their own plan or billing columns", async () => {
       await a.db.from("businesses").update({ plan: "business", paddle_subscription_id: "sub_fake" }).eq("id", a.businessId);

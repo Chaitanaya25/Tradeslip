@@ -195,7 +195,11 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
               {quote.status === "accepted" ? (
                 <p className="text-body">
                   Accepted by <span className="text-body-strong">{quote.accepted_name}</span> on{" "}
-                  {formatDateTime(quote.accepted_at, locale, business.timezone)}.
+                  {formatDateTime(quote.accepted_at, locale, business.timezone)} -{" "}
+                  <span className={quote.accepted_verified ? "text-status-good-text" : "text-text-muted"}>
+                    {quote.accepted_verified ? "verified by email" : "not verified"}
+                  </span>
+                  .
                 </p>
               ) : (
                 <p className="text-body">

@@ -62,6 +62,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       tax_rate_bps: quote.tax_rate_bps,
       accepted_at: quote.accepted_at,
       accepted_name: quote.accepted_name,
+      accepted_verified: quote.accepted_verified,
+      requires_verification: false,
       declined_at: quote.declined_at,
       decline_reason: quote.decline_reason,
     },

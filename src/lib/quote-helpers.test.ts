@@ -134,6 +134,10 @@ describe("describeActivity", () => {
     expect(describeActivity("quote.link_regenerated", {}, "Quote")).toMatch(/old link stopped/);
     expect(describeActivity("quote.viewed", {}, "Estimate")).toBe("Estimate viewed by customer");
   });
+  it("says whether an acceptance was verified", () => {
+    expect(describeActivity("quote.accepted", { name: "Sarah", verified: true }, "Estimate")).toBe("Estimate accepted by Sarah (verified by email)");
+    expect(describeActivity("quote.accepted", { name: "Sarah", verified: false }, "Estimate")).toBe("Estimate accepted by Sarah (not verified)");
+  });
   it("falls back to a readable label", () => {
     expect(describeActivity("quote.something_new", {}, "Quote")).toBe("Something new");
   });

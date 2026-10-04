@@ -9,6 +9,8 @@ export type OwnerNotificationProps =
       number: string;
       customerName: string | null;
       acceptedName: string;
+      /** True when the customer proved they own the email address on file with a code. */
+      verified: boolean;
       totalText: string;
       depositText: string | null;
       link: string;
@@ -43,6 +45,9 @@ export function OwnerNotificationEmail(p: OwnerNotificationProps) {
           </Text>
           <Text style={{ ...muted, marginTop: 8 }}>Total</Text>
           <Text style={{ fontSize: 24, fontWeight: 700, color: COLORS.accent, margin: "0 0 8px" }}>{p.totalText}</Text>
+          <Text style={{ ...muted, marginBottom: 8 }}>
+            {p.verified ? "Verified by email: they entered a code sent to the address you have on file." : "Not verified: this customer has no email on file, so no code was sent."}
+          </Text>
           {p.depositText ? <Text style={paragraph}>Deposit requested: {p.depositText}</Text> : null}
         </>
       ) : null}

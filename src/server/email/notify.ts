@@ -6,7 +6,7 @@ import { getOwnerNotificationTarget } from "@/server/public";
 import { sendEmail } from "./send";
 import { OwnerNotificationEmail, ownerNotificationSubject, type OwnerNotificationProps } from "./templates/owner-notification";
 
-type Event = { kind: "viewed" } | { kind: "accepted"; acceptedName: string } | { kind: "declined"; reason: string | null };
+type Event = { kind: "viewed" } | { kind: "accepted"; acceptedName: string; verified: boolean } | { kind: "declined"; reason: string | null };
 
 function appUrl(): string {
   return (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
@@ -40,6 +40,7 @@ export async function notifyOwner(token: string, event: Event): Promise<void> {
         kind: "accepted",
         ...common,
         acceptedName: event.acceptedName,
+        verified: event.verified,
         totalText: formatMoney(quote.total_cents, quote.currency, locale),
         depositText: quote.deposit_enabled
           ? formatMoney(depositCents(quote.total_cents, quote.deposit_bps), quote.currency, locale)

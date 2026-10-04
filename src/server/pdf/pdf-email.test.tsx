@@ -5,10 +5,11 @@ vi.mock("server-only", () => ({}));
 
 import { createElement } from "react";
 import { render } from "@react-email/components";
-import { buildQuoteDocument, pdfSafeLogoUrl, qtyText, quotePdfFilename } from "@/lib/quote-document";
+import { buildQuoteDocument, monogramFor, pdfSafeLogoUrl, qtyText, quotePdfFilename } from "@/lib/quote-document";
 import type { PublicQuote } from "@/lib/public-quote";
 import { QuoteToCustomerEmail } from "@/server/email/templates/quote-to-customer";
 import { OwnerNotificationEmail, ownerNotificationSubject } from "@/server/email/templates/owner-notification";
+import { OtpCodeEmail } from "@/server/email/templates/otp-code";
 import { formatFrom } from "@/server/email/send";
 import { renderQuotePdfBuffer } from "./render";
 
@@ -31,6 +32,8 @@ const pub: PublicQuote = {
     tax_rate_bps: 800,
     accepted_at: null,
     accepted_name: null,
+    accepted_verified: false,
+    requires_verification: true,
     declined_at: null,
     decline_reason: null,
   },
@@ -99,18 +102,62 @@ describe("buildQuoteDocument", () => {
   });
 });
 
+/** Number of pages in a PDF buffer. */
+function pageCount(buffer: Buffer): number {
+  return (buffer.toString("latin1").match(/\/Type\s*\/Page[^s]/g) ?? []).length;
+}
+
+const lines = (n: number, long = false) =>
+  Array.from({ length: n }, (_, i) => ({
+    description: long && i === 2
+      ? "Remove the existing galvanised supply pipework under the kitchen and utility room floors, supply and fit new 15mm copper pipe with isolation valves, test all joints under pressure, make good and leave the area clean"
+      : `Line item number ${i + 1}`,
+    qty: i % 4 === 0 ? 1.5 : 1,
+    unit_rate_cents: 1000 + i * 125,
+    amount_cents: 1000 + i * 125,
+    position: i,
+  }));
+
 describe("QuoteDocument PDF", () => {
-  it("renders to a real PDF buffer", async () => {
-    const buffer = await renderQuotePdfBuffer(buildQuoteDocument(pub, { logoUrl: null, photos: [] }));
+  const render = (p: PublicQuote) => renderQuotePdfBuffer(buildQuoteDocument(p, { logoUrl: null, photos: [] }));
+
+  it("renders a short quote with a deposit to a real, single-page PDF", async () => {
+    const buffer = await render(pub);
     expect(buffer.subarray(0, 5).toString()).toBe("%PDF-");
     expect(buffer.length).toBeGreaterThan(5000);
+    expect(pageCount(buffer)).toBe(1);
   }, 30_000);
 
-  it("renders a long quote on more than one page without throwing", async () => {
-    const many = { ...pub, items: Array.from({ length: 60 }, (_, i) => ({ description: `Line item number ${i + 1} with a reasonably long description`, qty: 1, unit_rate_cents: 1000, amount_cents: 1000, position: i })) };
-    const buffer = await renderQuotePdfBuffer(buildQuoteDocument(many, { logoUrl: null, photos: [] }));
+  it("breaks a 25-line quote across pages", async () => {
+    const buffer = await render({ ...pub, items: lines(25) });
+    expect(buffer.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(pageCount(buffer)).toBeGreaterThanOrEqual(2);
+  }, 30_000);
+
+  it("renders very long descriptions, long names and no deposit without throwing", async () => {
+    const buffer = await render({
+      ...pub,
+      items: lines(5, true),
+      quote: { ...pub.quote, deposit_enabled: false, notes: null },
+      business: { ...pub.business, name: "Miller & Sons Plumbing, Heating and Drainage Specialists Ltd", plan_branding: false },
+      customer: { ...pub.customer, name: "Bartholomew Wolfeschlegelsteinhausenbergerdorff-Smythe" },
+    });
     expect(buffer.subarray(0, 5).toString()).toBe("%PDF-");
   }, 30_000);
+
+  it("renders a 60-line quote on more than one page", async () => {
+    const buffer = await render({ ...pub, items: lines(60) });
+    expect(pageCount(buffer)).toBeGreaterThanOrEqual(3);
+  }, 30_000);
+});
+
+describe("monogramFor", () => {
+  it("uses the first letters of the first two words", () => {
+    expect(monogramFor("Miller Plumbing")).toBe("MP");
+    expect(monogramFor("Dave")).toBe("DA");
+    expect(monogramFor("  a & b Electrical ")).toBe("AB");
+    expect(monogramFor("")).toBe("T");
+  });
 });
 
 describe("email templates", () => {
@@ -150,13 +197,41 @@ describe("email templates", () => {
     const flat = async (el: ReturnType<typeof createElement>) => (await render(el)).replace(/<!-- -->/g, "");
     const viewed = await flat(createElement(OwnerNotificationEmail, { kind: "viewed", ...base }));
     expect(viewed).toContain("just opened estimate #1047");
-    const accepted = await flat(createElement(OwnerNotificationEmail, { kind: "accepted", ...base, acceptedName: "Sarah T", totalText: "$334.80", depositText: "$100.44" }));
+    const accepted = await flat(createElement(OwnerNotificationEmail, { kind: "accepted", ...base, acceptedName: "Sarah T", verified: true, totalText: "$334.80", depositText: "$100.44" }));
     expect(accepted).toContain("accepted estimate #1047");
     expect(accepted).toContain("$334.80");
     expect(accepted).toContain("Deposit requested: $100.44");
     const declined = await flat(createElement(OwnerNotificationEmail, { kind: "declined", ...base, reason: "Too expensive" }));
     expect(declined).toContain("Too expensive");
     expect(ownerNotificationSubject({ kind: "declined", ...base, reason: null })).toBe("Sarah Thompson declined estimate #1047");
+  });
+
+  it("renders the code email with a large code, the expiry and the ignore notice", async () => {
+    const element = createElement(OtpCodeEmail, {
+      businessName: "Miller Plumbing",
+      logoUrl: null,
+      customerName: "Sarah Thompson",
+      quoteWord: "Estimate",
+      number: "1047",
+      code: "004217",
+      expiresMinutes: 10,
+    });
+    const html = (await render(element)).replace(/<!-- -->/g, "");
+    const text = await render(element, { plainText: true });
+    expect(html).toContain("004217");
+    expect(html).toContain("expires in 10 minutes");
+    expect(html).toContain("If you did not request this, ignore this email");
+    expect(html).toContain("Miller Plumbing");
+    expect(text).toContain("004217");
+    expect(text).not.toContain("<");
+  });
+
+  it("says whether an acceptance was verified in the owner email", async () => {
+    const base = { kind: "accepted" as const, quoteWord: "Estimate", number: "1047", customerName: "Sarah", link: "https://app.test/quotes/1", businessName: "Miller", acceptedName: "Sarah T", totalText: "$334.80", depositText: null };
+    const verified = (await render(createElement(OwnerNotificationEmail, { ...base, verified: true }))).replace(/<!-- -->/g, "");
+    const unverified = (await render(createElement(OwnerNotificationEmail, { ...base, verified: false }))).replace(/<!-- -->/g, "");
+    expect(verified).toContain("Verified by email");
+    expect(unverified).toContain("Not verified");
   });
 
   it("builds a safe From header", () => {

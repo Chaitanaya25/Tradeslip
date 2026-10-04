@@ -2,11 +2,13 @@ import "server-only";
 import type { ReactElement } from "react";
 import { render } from "@react-email/components";
 import { Resend } from "resend";
+import { EMAIL_MESSAGES, mapResendError, type EmailFailure } from "@/lib/email-errors";
 
-export type SendResult = { ok: true } | { ok: false; reason: "not_configured" | "failed" };
+export { EMAIL_MESSAGES };
+export type { EmailFailure };
 
-export const EMAIL_NOT_CONFIGURED = "Email isn't set up yet. You can still share the link by text message or copy it.";
-export const EMAIL_FAILED = "We couldn't send that email. Check the address and try again, or share the link instead.";
+/** `id` is Resend's message id. Success is only reported when Resend returned one. */
+export type SendResult = { ok: true; id: string } | { ok: false; reason: EmailFailure };
 
 export function isEmailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY?.trim());
@@ -26,8 +28,8 @@ export function formatFrom(businessName: string): string {
 }
 
 /**
- * Send one email. Never throws into the caller's flow: failures come back as a result.
- * Only error codes are logged, never addresses or message bodies.
+ * Send one email and report what really happened. Never throws into the caller's flow.
+ * Only error names and status codes are logged, never addresses, codes or message bodies.
  */
 export async function sendEmail(input: {
   businessName: string;
@@ -41,7 +43,7 @@ export async function sendEmail(input: {
 
   try {
     const [html, text] = await Promise.all([render(input.react), render(input.react, { plainText: true })]);
-    const { error } = await new Resend(key).emails.send({
+    const { data, error } = await new Resend(key).emails.send({
       from: formatFrom(input.businessName),
       to: input.to,
       replyTo: input.replyTo || undefined,
@@ -49,11 +51,18 @@ export async function sendEmail(input: {
       html,
       text,
     });
+
     if (error) {
-      console.warn("[email] send failed", { name: error.name, status: (error as { statusCode?: number }).statusCode });
+      const reason = mapResendError(error);
+      console.warn("[email] send rejected", { reason, name: error.name, status: (error as { statusCode?: number | null }).statusCode ?? null });
+      return { ok: false, reason };
+    }
+    // No id means Resend did not accept the message, whatever else came back.
+    if (!data?.id) {
+      console.warn("[email] send returned no id");
       return { ok: false, reason: "failed" };
     }
-    return { ok: true };
+    return { ok: true, id: data.id };
   } catch {
     console.warn("[email] send threw");
     return { ok: false, reason: "failed" };
