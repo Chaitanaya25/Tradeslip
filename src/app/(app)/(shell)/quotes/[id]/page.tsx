@@ -13,7 +13,7 @@ import { requireBusiness } from "@/lib/auth/session";
 import { formatDateOnly, formatDateTime } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatBpsAsPercent } from "@/lib/money-input";
-import { quoteSendLimit, quoteSendsRemaining, usagePeriod } from "@/lib/plans";
+import { effectivePlanOf, quoteSendLimit, quoteSendsRemaining, usagePeriod } from "@/lib/plans";
 import { buildPublicUrl } from "@/lib/share-links";
 import { utcToZonedParts } from "@/lib/schedule";
 import { depositCents, todayInTimezone } from "@/lib/quote-calc";
@@ -88,7 +88,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
     },
     business.timezone,
     settingsFromBusiness(business),
-    business.plan,
+    effectivePlanOf(business),
   );
   const awaitingReply = (quote.status === "sent" || quote.status === "viewed") && effectiveStatus(quote.status, quote.valid_until, todayInTimezone(business.timezone)) !== "expired";
 
@@ -271,7 +271,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
             customer={{ name: c?.name ?? null, email: c?.email ?? null, phone: c?.phone ?? null }}
             businessName={business.name}
             country={business.country}
-            usage={{ limit: quoteSendLimit(business.plan), remaining: quoteSendsRemaining(business.plan, usedThisMonth) }}
+            usage={{ limit: quoteSendLimit(effectivePlanOf(business)), remaining: quoteSendsRemaining(effectivePlanOf(business), usedThisMonth) }}
           />
 
           {awaitingReply ? (

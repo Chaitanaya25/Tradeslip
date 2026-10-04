@@ -17,6 +17,7 @@ import { isEmailConfigured, sendEmail } from "@/server/email/send";
 import { InvoiceToCustomerEmail } from "@/server/email/templates/invoice-to-customer";
 import { actionBusinessContext } from "./context";
 
+import { effectivePlanOf, showsBrandingFooter } from "@/lib/plans";
 const idSchema = z.uuid();
 const CHANNELS = ["link", "email", "sms", "whatsapp"] as const;
 export type InvoiceSendChannel = (typeof CHANNELS)[number];
@@ -175,7 +176,7 @@ export async function sendInvoiceEmail(invoiceId: string, to?: string): Promise<
       balanceDueText: invoice.amount_paid_cents > 0 ? money(owed) : null,
       dueDateText: formatDateOnly(invoice.due_date, locale),
       link: buildPublicInvoiceUrl(appUrl(), invoice.public_token),
-      branding: business.plan === "trial" || business.plan === "free",
+      branding: showsBrandingFooter(effectivePlanOf(business)),
     }),
   });
   // Only a message Resend actually accepted counts as sent; the real reason is shown otherwise.

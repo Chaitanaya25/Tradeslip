@@ -6,6 +6,7 @@ import { logoPublicUrl } from "@/lib/supabase/storage";
 import { actionBusinessContext } from "@/server/actions/context";
 import { quotePdfResponse } from "@/server/pdf/render";
 
+import { effectivePlanOf, showsBrandingFooter } from "@/lib/plans";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
@@ -86,7 +87,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       tax_number: business.tax_number,
       tax_label: business.tax_label,
       payment_link_url: business.payment_link_url,
-      plan_branding: business.plan === "trial" || business.plan === "free",
+      plan_branding: showsBrandingFooter(effectivePlanOf(business)),
     },
     photos: [],
   };

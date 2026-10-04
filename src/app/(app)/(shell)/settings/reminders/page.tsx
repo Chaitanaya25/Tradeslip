@@ -6,6 +6,7 @@ import { quoteWord } from "@/lib/region";
 import { REGIONS } from "@/lib/region";
 import { createClient } from "@/lib/supabase/server";
 
+import { effectivePlanOf } from "@/lib/plans";
 export const metadata = { title: "Reminders · Settings · Tradeslip" };
 
 export default async function ReminderSettingsPage() {
@@ -21,7 +22,7 @@ export default async function ReminderSettingsPage() {
   return (
     <div className="space-y-6">
       <ReminderSettingsForm
-        allowed={planAllowsReminders(business.plan)}
+        allowed={planAllowsReminders(effectivePlanOf(business))}
         businessName={business.name}
         businessEmail={business.email}
         quoteWord={quoteWord(business.country)}

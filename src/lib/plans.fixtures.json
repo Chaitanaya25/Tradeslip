@@ -1,0 +1,39 @@
+{
+  "_comment": "Shared by src/lib/plans.test.ts (effectivePlan) and the scratch PGlite smoke test (effective_plan() in migration 012). now is a UTC instant; the answer is 'expect'.",
+  "now": "2026-10-14T12:00:00Z",
+  "cases": [
+    { "name": "trial still running", "plan": "trial", "trial_ends_at": "2026-10-20T12:00:00Z", "subscription_status": "none", "current_period_end": null, "expect": "trial" },
+    { "name": "trial with no subscription_status (null)", "plan": "trial", "trial_ends_at": "2026-10-20T12:00:00Z", "subscription_status": null, "current_period_end": null, "expect": "trial" },
+    { "name": "trial ends at exactly this instant", "plan": "trial", "trial_ends_at": "2026-10-14T12:00:00Z", "subscription_status": "none", "current_period_end": null, "expect": "free" },
+    { "name": "trial ended one second ago", "plan": "trial", "trial_ends_at": "2026-10-14T11:59:59Z", "subscription_status": "none", "current_period_end": null, "expect": "free" },
+    { "name": "trial ends one second from now", "plan": "trial", "trial_ends_at": "2026-10-14T12:00:01Z", "subscription_status": "none", "current_period_end": null, "expect": "trial" },
+    { "name": "trial with no end date", "plan": "trial", "trial_ends_at": null, "subscription_status": "none", "current_period_end": null, "expect": "free" },
+    { "name": "stored free ignores a future trial date", "plan": "free", "trial_ends_at": "2026-10-20T12:00:00Z", "subscription_status": "none", "current_period_end": null, "expect": "free" },
+    { "name": "unknown stored plan is free", "plan": "enterprise", "trial_ends_at": "2026-10-20T12:00:00Z", "subscription_status": "active", "current_period_end": "2026-11-01T00:00:00Z", "expect": "free" },
+
+    { "name": "pro active", "plan": "pro", "trial_ends_at": "2026-09-01T00:00:00Z", "subscription_status": "active", "current_period_end": "2026-11-01T00:00:00Z", "expect": "pro" },
+    { "name": "pro active even with no period end", "plan": "pro", "trial_ends_at": null, "subscription_status": "active", "current_period_end": null, "expect": "pro" },
+    { "name": "business active", "plan": "business", "trial_ends_at": null, "subscription_status": "active", "current_period_end": "2026-11-01T00:00:00Z", "expect": "business" },
+    { "name": "pro subscription trialing", "plan": "pro", "trial_ends_at": null, "subscription_status": "trialing", "current_period_end": "2026-10-20T00:00:00Z", "expect": "pro" },
+    { "name": "stored pro but no subscription, trial over", "plan": "pro", "trial_ends_at": "2026-09-01T00:00:00Z", "subscription_status": "none", "current_period_end": null, "expect": "free" },
+    { "name": "stored pro but no subscription, trial still running", "plan": "pro", "trial_ends_at": "2026-10-20T00:00:00Z", "subscription_status": "none", "current_period_end": null, "expect": "trial" },
+    { "name": "stored business, unknown status", "plan": "business", "trial_ends_at": null, "subscription_status": "weird", "current_period_end": "2026-11-01T00:00:00Z", "expect": "free" },
+
+    { "name": "past due, period ended 3 days ago (inside the 7-day grace)", "plan": "pro", "trial_ends_at": null, "subscription_status": "past_due", "current_period_end": "2026-10-11T12:00:00Z", "expect": "pro" },
+    { "name": "past due, period ends in the future", "plan": "pro", "trial_ends_at": null, "subscription_status": "past_due", "current_period_end": "2026-10-20T12:00:00Z", "expect": "pro" },
+    { "name": "past due, grace ends one second from now", "plan": "pro", "trial_ends_at": null, "subscription_status": "past_due", "current_period_end": "2026-10-07T12:00:01Z", "expect": "pro" },
+    { "name": "past due, grace ends exactly now", "plan": "pro", "trial_ends_at": null, "subscription_status": "past_due", "current_period_end": "2026-10-07T12:00:00Z", "expect": "free" },
+    { "name": "past due, grace over", "plan": "business", "trial_ends_at": null, "subscription_status": "past_due", "current_period_end": "2026-10-01T00:00:00Z", "expect": "free" },
+    { "name": "past due with no period end", "plan": "pro", "trial_ends_at": null, "subscription_status": "past_due", "current_period_end": null, "expect": "free" },
+
+    { "name": "canceled, period ends in 10 days", "plan": "pro", "trial_ends_at": null, "subscription_status": "canceled", "current_period_end": "2026-10-24T12:00:00Z", "expect": "pro" },
+    { "name": "canceled, period ends one second from now", "plan": "pro", "trial_ends_at": null, "subscription_status": "canceled", "current_period_end": "2026-10-14T12:00:01Z", "expect": "pro" },
+    { "name": "canceled, period ended exactly now", "plan": "pro", "trial_ends_at": null, "subscription_status": "canceled", "current_period_end": "2026-10-14T12:00:00Z", "expect": "free" },
+    { "name": "canceled, period over", "plan": "business", "trial_ends_at": null, "subscription_status": "canceled", "current_period_end": "2026-10-01T00:00:00Z", "expect": "free" },
+    { "name": "canceled with no period end", "plan": "pro", "trial_ends_at": null, "subscription_status": "canceled", "current_period_end": null, "expect": "free" },
+    { "name": "canceled but the original trial is still running", "plan": "pro", "trial_ends_at": "2026-10-20T00:00:00Z", "subscription_status": "canceled", "current_period_end": "2026-10-01T00:00:00Z", "expect": "trial" },
+
+    { "name": "paused loses access", "plan": "pro", "trial_ends_at": "2026-09-01T00:00:00Z", "subscription_status": "paused", "current_period_end": "2026-11-01T00:00:00Z", "expect": "free" },
+    { "name": "paused during a running trial falls back to the trial", "plan": "pro", "trial_ends_at": "2026-10-20T00:00:00Z", "subscription_status": "paused", "current_period_end": "2026-11-01T00:00:00Z", "expect": "trial" }
+  ]
+}

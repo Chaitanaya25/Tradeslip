@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { failure, type ActionResult } from "@/lib/action-result";
+import { failure, limitFailure, type ActionResult } from "@/lib/action-result";
 import { EMAIL_DELIVERED, EMAIL_MESSAGES } from "@/lib/email-errors";
 import { fieldErrorsFromIssues } from "@/lib/forms";
 import { remainingCents } from "@/lib/invoice-calc";
@@ -28,6 +28,7 @@ import { buildReminderMessage, deliverReminder, targetFromInvoiceRow, targetFrom
 import { appUrl, liveDeliverIo } from "@/server/reminders/live";
 import { actionBusinessContext } from "./context";
 
+import { effectivePlanOf, showsBrandingFooter } from "@/lib/plans";
 const idSchema = z.uuid();
 
 /**
@@ -42,8 +43,8 @@ export async function saveReminderSettings(raw: ReminderSettingsFormValues): Pro
   if (!parsed.success) return failure("Check the highlighted fields.", fieldErrorsFromIssues(parsed.error.issues));
   const v = parsed.data;
 
-  if (!planAllowsReminders(ctx.business.plan) && (v.enabled || v.quote_followup_enabled || v.invoice_reminders_enabled)) {
-    return failure("Automatic reminders are part of the paid plans. Upgrade to switch them on.");
+  if (!planAllowsReminders(effectivePlanOf(ctx.business)) && (v.enabled || v.quote_followup_enabled || v.invoice_reminders_enabled)) {
+    return limitFailure("reminders", "Automatic reminders are part of the paid plans. Upgrade to switch them on.");
   }
 
   const { error } = await ctx.supabase
@@ -79,7 +80,7 @@ export async function sendTestReminder(kind: ReminderKind, template: string): Pr
 
   const input = testInput.safeParse({ kind, template });
   if (!input.success || /[<>]/.test(input.data.template)) return failure("Use plain text only, up to 1,500 characters.");
-  if (!planAllowsReminders(ctx.business.plan)) return failure("Reminders are part of the paid plans.");
+  if (!planAllowsReminders(effectivePlanOf(ctx.business))) return limitFailure("reminders", "Reminders are part of the paid plans.");
 
   const to = ctx.business.email?.trim();
   if (!to) return failure("Add your business email in Settings first. The test goes to that address.");
@@ -104,9 +105,9 @@ export async function sendTestReminder(kind: ReminderKind, template: string): Pr
     businessEmail: business.email,
     country: business.country,
     currency: business.currency,
-    plan: business.plan,
+    plan: effectivePlanOf(business),
     logoPath: business.logo_path,
-    planBranding: business.plan === "trial" || business.plan === "free",
+    planBranding: showsBrandingFooter(effectivePlanOf(business)),
     template: null,
     publicToken: "sample-token-not-a-real-link-0000000000",
     totalCents: 33480,
@@ -168,7 +169,7 @@ export async function sendReminderNow(entity: "quote" | "invoice", id: string): 
       now,
       business.timezone,
       settings,
-      { plan: business.plan, unsubscribed, manual: true },
+      { plan: effectivePlanOf(business), unsubscribed, manual: true },
     );
     target = targetFromQuoteRow({
       entity_id: q.id,
@@ -183,9 +184,9 @@ export async function sendReminderNow(entity: "quote" | "invoice", id: string): 
       business_name: business.name,
       business_email: business.email,
       country: business.country,
-      plan: business.plan,
+      plan: effectivePlanOf(business),
       logo_path: business.logo_path,
-      plan_branding: business.plan === "trial" || business.plan === "free",
+      plan_branding: showsBrandingFooter(effectivePlanOf(business)),
       template: business.quote_followup_template,
     });
   } else {
@@ -203,7 +204,7 @@ export async function sendReminderNow(entity: "quote" | "invoice", id: string): 
       now,
       business.timezone,
       settings,
-      { plan: business.plan, unsubscribed, manual: true },
+      { plan: effectivePlanOf(business), unsubscribed, manual: true },
     );
     const kind = i.reminder_count === 0 ? "invoice_reminder_1" : "invoice_reminder_2";
     target = targetFromInvoiceRow({
@@ -221,16 +222,19 @@ export async function sendReminderNow(entity: "quote" | "invoice", id: string): 
       business_name: business.name,
       business_email: business.email,
       country: business.country,
-      plan: business.plan,
+      plan: effectivePlanOf(business),
       logo_path: business.logo_path,
-      plan_branding: business.plan === "trial" || business.plan === "free",
+      plan_branding: showsBrandingFooter(effectivePlanOf(business)),
       template: kind === "invoice_reminder_1" ? business.invoice_reminder_1_template : business.invoice_reminder_2_template,
       reminder_kind: kind,
     });
     if (remainingCents(i.total_cents, i.amount_paid_cents) <= 0 && verdict.due) verdict = { due: false, reason: "not_overdue" };
   }
 
-  if (!verdict.due) return failure(skipReasonMessage(verdict.reason, entity, word));
+  if (!verdict.due) {
+    const message = skipReasonMessage(verdict.reason, entity, word);
+    return verdict.reason === "plan" ? limitFailure("reminders", message) : failure(message);
+  }
 
   const result = await deliverReminder(target, liveDeliverIo());
   revalidatePath(entity === "quote" ? `/quotes/${id}` : `/invoices/${id}`);

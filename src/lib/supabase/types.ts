@@ -1,5 +1,5 @@
 /**
- * Database types, hand-written to match supabase/migrations/001-011 exactly.
+ * Database types, hand-written to match supabase/migrations/001-012 exactly.
  *
  * Regenerate from your live database with:
  *   supabase gen types typescript --project-id <id> > src/lib/supabase/types.ts
@@ -22,7 +22,8 @@ type QuoteStatus = "draft" | "sent" | "viewed" | "accepted" | "declined" | "expi
 type InvoiceStatus = "draft" | "sent" | "viewed" | "paid" | "void";
 type PaymentMethod = "cash" | "card" | "bank_transfer" | "cheque" | "other";
 type PhotoKind = "before" | "after" | "other";
-type ActivityEntity = "quote" | "invoice" | "customer";
+type SubscriptionStatus = "none" | "trialing" | "active" | "past_due" | "paused" | "canceled";
+type ActivityEntity = "quote" | "invoice" | "customer" | "business";
 
 /** Insert shape: columns in `Optional` have DB defaults (or are nullable) and may be omitted. */
 type Insertable<Row, Optional extends keyof Row> = Omit<Row, Optional> & Partial<Pick<Row, Optional>>;
@@ -71,6 +72,12 @@ type BusinessRow = {
   trial_ends_at: string | null;
   paddle_customer_id: string | null;
   paddle_subscription_id: string | null;
+  subscription_status: SubscriptionStatus;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  billing_interval: "month" | "year" | null;
+  paddle_price_id: string | null;
+  last_billing_event_at: string | null;
   onboarded_at: string | null;
 };
 
@@ -273,6 +280,24 @@ type UnsubscribedEmailRow = {
   created_at: string;
 };
 
+type BillingEventRow = {
+  id: string;
+  paddle_event_id: string;
+  event_type: string;
+  business_id: string | null;
+  payload_summary: Json;
+  processed_at: string | null;
+  status: "processed" | "ignored" | "failed";
+  error: string | null;
+  created_at: string;
+};
+
+type BillingNoticeRow = {
+  business_id: string;
+  kind: "trial_ending" | "trial_ended";
+  created_at: string;
+};
+
 type RateLimitRow = {
   id: string;
   created_at: string;
@@ -368,6 +393,7 @@ export type Database = {
           | "quote_followup_enabled" | "quote_followup_days" | "invoice_reminders_enabled" | "invoice_reminder_1_days" | "invoice_reminder_2_days"
           | "invoice_reminder_1_template" | "invoice_reminder_2_template"
           | "plan" | "trial_ends_at" | "paddle_customer_id" | "paddle_subscription_id" | "onboarded_at"
+          | "subscription_status" | "current_period_end" | "cancel_at_period_end" | "billing_interval" | "paddle_price_id" | "last_billing_event_at"
         >;
         Update: Partial<BusinessRow>;
         Relationships: [];
@@ -494,6 +520,18 @@ export type Database = {
         Update: Partial<UnsubscribedEmailRow>;
         Relationships: [Rel<"unsubscribed_emails", "business_id", "businesses">];
       };
+      billing_events: {
+        Row: BillingEventRow;
+        Insert: Insertable<BillingEventRow, "id" | "business_id" | "payload_summary" | "processed_at" | "status" | "error" | "created_at">;
+        Update: Partial<BillingEventRow>;
+        Relationships: [Rel<"billing_events", "business_id", "businesses">];
+      };
+      billing_notices: {
+        Row: BillingNoticeRow;
+        Insert: Insertable<BillingNoticeRow, "created_at">;
+        Update: Partial<BillingNoticeRow>;
+        Relationships: [Rel<"billing_notices", "business_id", "businesses">];
+      };
       rate_limits: {
         Row: RateLimitRow;
         Insert: Insertable<RateLimitRow, Common | "count">;
@@ -612,6 +650,30 @@ export type Database = {
           overdue_count: number;
           overdue_cents: number;
         }[];
+      };
+      effective_plan: {
+        Args: { p_plan: string; p_trial_ends_at: string | null; p_status: string | null; p_period_end: string | null; p_now?: string };
+        Returns: "free" | "trial" | "pro" | "business";
+      };
+      apply_billing_event: {
+        Args: { p_event_id: string; p_event_type: string; p_business_id: string | null; p_fields: Json; p_occurred_at: string; p_summary?: Json };
+        Returns: string;
+      };
+      record_billing_failure: {
+        Args: { p_event_id: string; p_event_type: string; p_error: string };
+        Returns: undefined;
+      };
+      list_trial_notices: {
+        Args: { p_now: string; p_limit?: number };
+        Returns: { business_id: string; kind: "trial_ending" | "trial_ended"; business_name: string; business_email: string; timezone: string; trial_ends_at: string }[];
+      };
+      claim_billing_notice: {
+        Args: { p_business_id: string; p_kind: string };
+        Returns: boolean;
+      };
+      release_billing_notice: {
+        Args: { p_business_id: string; p_kind: string };
+        Returns: undefined;
       };
       claim_reminder: {
         Args: { p_entity_type: string; p_entity_id: string; p_kind: string };

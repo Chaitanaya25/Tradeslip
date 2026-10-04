@@ -1,6 +1,7 @@
 import { daysBetween, localDateOf, localHour } from "./dashboard";
 import { derivedStatus, remainingCents, type StoredInvoiceStatus } from "./invoice-calc";
 import { defaultValidUntil, todayInTimezone } from "./quote-calc";
+import { planAllowsReminders } from "./plans";
 import { isExpired } from "./quote-send";
 import type { Country } from "./region";
 
@@ -13,10 +14,7 @@ import type { Country } from "./region";
 
 // --- Plan, window ---------------------------------------------------------------
 
-/** Trial, Pro and Business send reminders; Free never does. Unknown plans do not. */
-export function planAllowsReminders(plan: string): boolean {
-  return plan === "trial" || plan === "pro" || plan === "business";
-}
+export { planAllowsReminders };
 
 export const SEND_WINDOW_START = 8;
 export const SEND_WINDOW_END = 18;

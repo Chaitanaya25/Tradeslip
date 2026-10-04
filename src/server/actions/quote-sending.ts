@@ -5,7 +5,7 @@ import { z } from "zod";
 import { failure, type ActionResult } from "@/lib/action-result";
 import { formatDateOnly } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
-import { quoteLimitMessage, quoteSendLimit, quoteSendsRemaining, usagePeriod } from "@/lib/plans";
+import { effectivePlanOf, quoteLimitMessage, quoteSendLimit, quoteSendsRemaining, showsBrandingFooter, usagePeriod } from "@/lib/plans";
 import { todayInTimezone } from "@/lib/quote-calc";
 import { canSend, getSendProblems, type SendableStatus } from "@/lib/quote-send";
 import { REGIONS, quoteWord } from "@/lib/region";
@@ -28,7 +28,7 @@ export type SendUsage = { limit: number | null; remaining: number | null };
 
 export type SendQuoteResult =
   | { ok: true; publicUrl: string; firstSend: boolean; usage: SendUsage }
-  | { ok: false; message: string; problems?: string[] };
+  | { ok: false; message: string; problems?: string[]; limit?: "quote_send" };
 
 function appUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -51,7 +51,7 @@ async function loadQuote(ctx: Ctx, quoteId: string) {
 }
 
 async function currentUsage(ctx: Ctx): Promise<SendUsage> {
-  const limit = quoteSendLimit(ctx.business.plan);
+  const limit = quoteSendLimit(effectivePlanOf(ctx.business));
   if (limit === null) return { limit: null, remaining: null };
   const { data } = await ctx.supabase
     .from("usage_counters")
@@ -59,7 +59,7 @@ async function currentUsage(ctx: Ctx): Promise<SendUsage> {
     .eq("business_id", ctx.business.id)
     .eq("period", usagePeriod(ctx.business.timezone))
     .maybeSingle();
-  return { limit, remaining: quoteSendsRemaining(ctx.business.plan, data?.quotes_sent ?? 0) };
+  return { limit, remaining: quoteSendsRemaining(effectivePlanOf(ctx.business), data?.quotes_sent ?? 0) };
 }
 
 async function logActivity(ctx: Ctx, quoteId: string, event: string, meta: Record<string, string> = {}) {
@@ -102,12 +102,12 @@ export async function sendQuote(quoteId: string, options: { channel: SendChannel
   let token = quote.public_token;
 
   if (firstSend) {
-    const limit = quoteSendLimit(ctx.business.plan);
+    const limit = quoteSendLimit(effectivePlanOf(ctx.business));
     const period = usagePeriod(ctx.business.timezone);
     if (limit !== null) {
       const reservation = await reserveQuoteSend(ctx.business.id, period, limit);
       if (reservation.error) return { ok: false, message: "We couldn't check your plan just now. Try again." };
-      if (!reservation.ok) return { ok: false, message: quoteLimitMessage(word) };
+      if (!reservation.ok) return { ok: false, message: quoteLimitMessage(word), limit: "quote_send" };
     }
 
     // The draft's placeholder token was never shared, so a fresh one is issued at first send.
@@ -199,7 +199,7 @@ export async function sendQuoteEmail(quoteId: string, to?: string): Promise<Acti
       totalText: formatMoney(quote.total_cents, quote.currency, locale),
       validUntilText: quote.valid_until ? formatDateOnly(quote.valid_until, locale) : null,
       link: buildPublicUrl(appUrl(), quote.public_token),
-      branding: business.plan === "trial" || business.plan === "free",
+      branding: showsBrandingFooter(effectivePlanOf(business)),
     }),
   });
   // Only a message Resend actually accepted counts as sent; the real reason is shown otherwise.

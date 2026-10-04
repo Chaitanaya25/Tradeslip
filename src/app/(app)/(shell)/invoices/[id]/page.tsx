@@ -21,6 +21,7 @@ import { buildPublicInvoiceUrl } from "@/lib/share-links";
 import { logoPublicUrl } from "@/lib/supabase/storage";
 import { createClient } from "@/lib/supabase/server";
 
+import { effectivePlanOf } from "@/lib/plans";
 export const metadata = { title: "Invoice · Tradeslip" };
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -77,7 +78,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     },
     business.timezone,
     settingsFromBusiness(business),
-    business.plan,
+    effectivePlanOf(business),
   );
 
   const hasLink = invoice.status === "sent" || invoice.status === "viewed" || invoice.status === "paid";

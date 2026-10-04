@@ -11,9 +11,10 @@ const SECTIONS = [
   { href: "/settings/numbering", label: "Numbering and defaults" },
   { href: "/settings/payment-link", label: "Payment link" },
   { href: "/settings/reminders", label: "Reminders" },
+  { href: "/settings/billing", label: "Billing" },
 ] as const;
 
-const COMING_SOON = ["Billing", "Data export"] as const;
+const COMING_SOON = ["Data export"] as const;
 
 /** Left sub-nav on desktop, horizontally scrolling tabs on small screens. */
 export function SettingsNav() {

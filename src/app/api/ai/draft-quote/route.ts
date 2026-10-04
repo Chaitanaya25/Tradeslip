@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { postprocessDraft, type DraftResult } from "@/lib/ai/postprocess";
-import { aiDraftLimit, limitReachedMessage, usagePeriod } from "@/lib/plans";
+import { aiDraftLimit, effectivePlanOf, limitReachedMessage, usagePeriod } from "@/lib/plans";
 import { escapeLikePattern } from "@/lib/quote-helpers";
 import { MAX_AUDIO_BYTES, isValidVoicePath, mimeForPath } from "@/lib/voice";
 import { actionBusinessContext } from "@/server/actions/context";
@@ -67,9 +67,9 @@ export async function POST(request: NextRequest) {
   }
 
   const period = usagePeriod(business.timezone);
-  const reservation = await reserveAiDraft(business.id, period, aiDraftLimit(business.plan));
+  const reservation = await reserveAiDraft(business.id, period, aiDraftLimit(effectivePlanOf(business)));
   if (reservation.error) return fail(503, "usage_unavailable", FRIENDLY_MESSAGES.upstream);
-  if (!reservation.ok) return fail(402, "limit_reached", limitReachedMessage(business.plan));
+  if (!reservation.ok) return fail(402, "limit_reached", limitReachedMessage(effectivePlanOf(business)));
 
   // 4. The price book the model may match against (active items only).
   const { data: priceItems } = await supabase

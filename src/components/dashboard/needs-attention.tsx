@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { CircleAlert, Clock, FileText } from "lucide-react";
 import { CreateInvoiceButton } from "@/components/invoices/create-invoice-button";
+import { UpgradeDialog } from "@/components/billing/upgrade-dialog";
 import { SendReminderDialog } from "@/components/reminders/send-reminder-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,6 +21,7 @@ const ICONS = { overdue_invoice: CircleAlert, expiring_quote: Clock, no_reply: F
  */
 export function NeedsAttention({ items, quoteWord }: { items: AttentionItem[]; quoteWord: string }) {
   const [sharing, setSharing] = useState<AttentionItem | null>(null);
+  const [limitMessage, setLimitMessage] = useState<string | null>(null);
   const toast = useToast();
 
   async function copy(link: string) {
@@ -83,8 +85,10 @@ export function NeedsAttention({ items, quoteWord }: { items: AttentionItem[]; q
           id={sharing.share.id}
           customerName={sharing.share.customer.name}
           label={sharing.title}
+          onLimit={setLimitMessage}
         />
       ) : null}
+      <UpgradeDialog limit={limitMessage ? "reminders" : null} message={limitMessage} onClose={() => setLimitMessage(null)} />
     </Card>
   );
 }

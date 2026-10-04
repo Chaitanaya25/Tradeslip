@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CircleCheck, LoaderCircle, Mic, RotateCcw, Square, Trash2, X } from "lucide-react";
+import { UpgradeDialog } from "@/components/billing/upgrade-dialog";
 import { useVoiceRecorder, type RecordingResult } from "@/components/quotes/use-voice-recorder";
 import { VoicePlayer } from "@/components/quotes/voice-player";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ type Phase = "idle" | "uploading" | "drafting" | "error";
 const EXAMPLE =
   "Sarah Thompson, 42 Maple Avenue, replace the kitchen mixer tap and fix the leak under the sink, parts about eighty dollars.";
 
-async function requestDraft(path: string): Promise<{ ok: true; draft: DraftApiResponse } | { ok: false; message: string }> {
+async function requestDraft(path: string): Promise<{ ok: true; draft: DraftApiResponse } | { ok: false; message: string; limit?: "ai_draft" }> {
   try {
     const res = await fetch("/api/ai/draft-quote", {
       method: "POST",
@@ -27,6 +28,7 @@ async function requestDraft(path: string): Promise<{ ok: true; draft: DraftApiRe
     });
     const body = await res.json().catch(() => null);
     if (!res.ok) {
+      if (res.status === 402 && body?.error?.code === "limit_reached") return { ok: false, message: body.error.message, limit: "ai_draft" };
       return { ok: false, message: body?.error?.message ?? "Voice drafting hit a problem. Try again, or fill the quote in by hand." };
     }
     return { ok: true, draft: body as DraftApiResponse };
@@ -61,6 +63,7 @@ export function VoiceNoteCard({
 }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [limitMessage, setLimitMessage] = useState<string | null>(null);
   const pending = useRef<{ blob?: Blob; mime?: string; path?: string; seconds: number } | null>(null);
 
   const draftFromPath = useCallback(
@@ -68,6 +71,7 @@ export function VoiceNoteCard({
       setPhase("drafting");
       const result = await requestDraft(path);
       if (!result.ok) {
+        if (result.limit) setLimitMessage(result.message);
         setMessage(result.message);
         setPhase("error");
         return;
@@ -225,6 +229,8 @@ export function VoiceNoteCard({
           {recorder.error}
         </p>
       ) : null}
+
+      <UpgradeDialog limit={limitMessage ? "ai_draft" : null} message={limitMessage} onClose={() => setLimitMessage(null)} />
     </Card>
   );
 }

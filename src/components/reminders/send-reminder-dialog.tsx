@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { UpgradeDialog } from "@/components/billing/upgrade-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { sendReminderNow } from "@/server/actions/reminders";
@@ -17,6 +18,7 @@ export function SendReminderDialog({
   id,
   customerName,
   label,
+  onLimit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -25,17 +27,26 @@ export function SendReminderDialog({
   customerName: string | null;
   /** e.g. "Invoice #INV-1001" */
   label: string;
+  /** When the parent unmounts this dialog on close, it can show the upgrade dialog itself. */
+  onLimit?: (message: string) => void;
 }) {
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [limitMessage, setLimitMessage] = useState<string | null>(null);
 
   function send() {
     setError(null);
     startTransition(async () => {
       const result = await sendReminderNow(entity, id);
       if (!result.ok) {
+        if (result.limit === "reminders") {
+          if (onLimit) onLimit(result.message);
+          else setLimitMessage(result.message);
+          onOpenChange(false);
+          return;
+        }
         setError(result.message);
         toast.error(result.message);
         return;
@@ -47,6 +58,7 @@ export function SendReminderDialog({
   }
 
   return (
+    <>
     <ConfirmDialog
       open={open}
       onOpenChange={(next) => {
@@ -59,5 +71,7 @@ export function SendReminderDialog({
       pending={pending}
       onConfirm={send}
     />
+    <UpgradeDialog limit={limitMessage ? "reminders" : null} message={limitMessage} onClose={() => setLimitMessage(null)} />
+    </>
   );
 }

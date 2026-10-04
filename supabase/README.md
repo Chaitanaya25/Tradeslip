@@ -12,6 +12,7 @@ All schema lives in plain SQL files. You do not need Docker or `supabase start`.
 | `migrations/004_storage.sql` | Buckets `logos` / `voice-notes` / `job-photos` and path policies |
 | `migrations/005_save_quote.sql` | `save_quote`: saves a draft quote and its items in one transaction |
 | `migrations/006_voice_and_limits.sql` | `save_quote` stores voice note + transcript; atomic AI-draft and rate-limit counters (service role only) |
+| `migrations/012_billing.sql` | Plans and subscriptions: subscription columns (owner-proof guard), `effective_plan()`, `billing_events`, `apply_billing_event` (Paddle webhook), trial notices; public pages and reminder lists now use `effective_plan()` |
 | `migrations/007_public_quotes.sql` | Customer link functions: `get_public_quote`, view / accept / decline, free-plan send counter (service role only) |
 | `migrations/008_accept_otp.sql` | Emailed 6-digit code before a customer can accept (`issue_accept_otp`, `accept_quote_verified`), `accepted_verified` flag |
 | `migrations/009_invoices.sql` | Invoices: `invoice_payments`, `save_invoice`, `record_invoice_payment`, `void_invoice`, `create_invoice_from_quote`, public invoice link (`get_public_invoice`, `record_invoice_view`), tamper guards, payment-based `dashboard_stats` |
@@ -19,7 +20,7 @@ All schema lives in plain SQL files. You do not need Docker or `supabase start`.
 | `migrations/011_reminders.sql` | Automatic reminders: settings columns, `reminder_log`, `unsubscribed_emails`, claim / finalize / due-list functions, `expire_due_quotes` (service role only) |
 | `seed.sql` | `seed_demo_data(owner uuid)` — demo business "Miller Plumbing" |
 
-Run them **in this order: 001, 002, 003, 004, 005, 006, 007, 008, 009, 010, 011, then seed.sql.** Each file is safe to run twice.
+Run them **in this order: 001, 002, 003, 004, 005, 006, 007, 008, 009, 010, 011, 012, then seed.sql.** Each file is safe to run twice.
 
 ## Option A — SQL editor (simplest)
 
@@ -89,7 +90,7 @@ user B's businesses, customers, quotes or quote items. It creates and deletes us
 **Use a separate throwaway Supabase project for this. Never point it at your main project.**
 
 1. Create a new empty Supabase project.
-2. Run migrations 001–011 on it.
+2. Run migrations 001–012 on it.
 3. Create `.env.test.local` in the repo root:
 
 ```

@@ -28,6 +28,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { Toggle } from "@/components/ui/toggle";
+import { UpgradeDialog } from "@/components/billing/upgrade-dialog";
 import { SendProblemsDialog } from "@/components/quotes/send-problems-dialog";
 import { SendSheet } from "@/components/quotes/send-sheet";
 import { getSendProblems } from "@/lib/quote-send";
@@ -77,6 +78,7 @@ export function QuoteBuilder({
   );
   const [pendingDraft, setPendingDraft] = useState<{ draft: DraftApiResponse; audio: VoiceAudio } | null>(null);
   const [problems, setProblems] = useState<string[] | null>(null);
+  const [limitHit, setLimitHit] = useState<{ message: string } | null>(null);
   const [sendSession, setSendSession] = useState<{ quoteId: string; link: string; usage: SendUsage } | null>(null);
   const [working, setWorking] = useState<"send" | "preview" | null>(null);
 
@@ -226,6 +228,7 @@ export function QuoteBuilder({
       const sent = await sendQuote(id, { channel: "link" });
       if (!sent.ok) {
         if (sent.problems?.length) setProblems(sent.problems);
+        else if (sent.limit) setLimitHit({ message: sent.message });
         else toast.error(sent.message);
         return;
       }
@@ -454,6 +457,7 @@ export function QuoteBuilder({
 
       {unsavedDialog}
       <SendProblemsDialog problems={problems} quoteWord={word} onClose={() => setProblems(null)} />
+      <UpgradeDialog limit={limitHit ? "quote_send" : null} message={limitHit?.message} quoteWord={word} onClose={() => setLimitHit(null)} />
       {sendSession ? (
         <SendSheet
           open
