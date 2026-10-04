@@ -10,9 +10,10 @@ All schema lives in plain SQL files. You do not need Docker or `supabase start`.
 | `migrations/002_documents.sql` | `quotes`, `quote_items`, `invoices`, `invoice_items`, `job_photos`, `activity`, `usage_counters`, `rate_limits`, RLS |
 | `migrations/003_functions.sql` | `next_doc_number`, `dashboard_stats`, `monthly_invoice_totals` |
 | `migrations/004_storage.sql` | Buckets `logos` / `voice-notes` / `job-photos` and path policies |
+| `migrations/005_save_quote.sql` | `save_quote`: saves a draft quote and its items in one transaction |
 | `seed.sql` | `seed_demo_data(owner uuid)` — demo business "Miller Plumbing" |
 
-Run them **in this order: 001, 002, 003, 004, then seed.sql.** Each file is safe to run twice.
+Run them **in this order: 001, 002, 003, 004, 005, then seed.sql.** Each file is safe to run twice.
 
 ## Option A — SQL editor (simplest)
 
@@ -82,7 +83,7 @@ user B's businesses, customers, quotes or quote items. It creates and deletes us
 **Use a separate throwaway Supabase project for this. Never point it at your main project.**
 
 1. Create a new empty Supabase project.
-2. Run migrations 001–004 on it.
+2. Run migrations 001–005 on it.
 3. Create `.env.test.local` in the repo root:
 
 ```

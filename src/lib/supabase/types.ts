@@ -373,6 +373,10 @@ export type Database = {
         Args: { p_business_id: string; p_kind: "quote" | "invoice" };
         Returns: number;
       };
+      save_quote: {
+        Args: { p_quote_id: string; p_fields: Json; p_items: Json };
+        Returns: undefined;
+      };
       dashboard_stats: {
         Args: { p_business_id: string };
         Returns: {

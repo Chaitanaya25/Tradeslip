@@ -14,6 +14,32 @@ export function fieldErrorsFromIssues(
 }
 
 /**
+ * `{ "items.0.rate": "msg" }` -> `{ items: [ { rate: { type, message } } ] }`, the shape
+ * react-hook-form expects for nested objects and field arrays.
+ */
+export function nestFieldErrors(flat: Record<string, string>): Record<string, unknown> {
+  const root: Record<string, unknown> = {};
+  for (const [path, message] of Object.entries(flat)) {
+    const keys = path.split(".");
+    let node: Record<string, unknown> | unknown[] = root;
+    keys.forEach((key, i) => {
+      const last = i === keys.length - 1;
+      const slot: string | number = Array.isArray(node) ? Number(key) : key;
+      if (last) {
+        (node as Record<string | number, unknown>)[slot] = { type: "validation", message };
+        return;
+      }
+      const container = (node as Record<string | number, unknown>)[slot];
+      if (container === undefined) {
+        (node as Record<string | number, unknown>)[slot] = /^\d+$/.test(keys[i + 1]) ? [] : {};
+      }
+      node = (node as Record<string | number, unknown>)[slot] as Record<string, unknown> | unknown[];
+    });
+  }
+  return root;
+}
+
+/**
  * Minimal zod resolver for react-hook-form (flat forms). Keeps us off the extra
  * @hookform/resolvers dependency. Valid input returns the parsed (transformed) output.
  */
@@ -26,10 +52,9 @@ export function zodResolver<TInput extends FieldValues, TOutput>(
       return { values: result.data, errors: {} };
     }
 
-    const errors: Record<string, { type: string; message: string }> = {};
-    for (const [key, message] of Object.entries(fieldErrorsFromIssues(result.error.issues))) {
-      errors[key] = { type: "validation", message };
-    }
-    return { values: {}, errors: errors as FieldErrors<TInput> };
+    return {
+      values: {},
+      errors: nestFieldErrors(fieldErrorsFromIssues(result.error.issues)) as FieldErrors<TInput>,
+    };
   };
 }

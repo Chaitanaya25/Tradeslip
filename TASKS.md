@@ -29,14 +29,14 @@ Work top to bottom. One task at a time. After each: `pnpm typecheck && pnpm lint
 - [x] Settings: business profile + logo upload, regional/tax, numbering, payment terms/validity, payment link.
 
 ## Phase 3 — Quotes core (Day 9–14)
-- [ ] Customer form component (region-aware address fields).
-- [ ] Quote builder layout matching `02-quote-builder.png` (left: voice card + customer; right: document card).
-- [ ] Line-item editor: add/remove/reorder (dnd-kit), price-book autocomplete, qty/rate inputs, live totals, needs-price highlight.
-- [ ] Toggles: deposit %, include photos. Valid-until date picker.
-- [ ] Server actions: create/update draft quote (allocate number on first save), duplicate, delete draft. Totals recomputed server-side.
-- [ ] Quotes list page: filters by status, search, table like dashboard.
-- [ ] Quote detail page (read view of a sent quote + activity timeline + actions).
-- [ ] Job photo upload (client-side compression to 1600px), before/after tag.
+- [x] Customer form component (region-aware address fields).
+- [x] Quote builder layout matching `02-quote-builder.png` (left: voice card + customer; right: document card).
+- [x] Line-item editor: add/remove/reorder (dnd-kit), price-book autocomplete, qty/rate inputs, live totals, needs-price highlight.
+- [x] Toggles: deposit %, include photos. Valid-until date picker.
+- [x] Server actions: create/update draft quote (allocate number on first save), duplicate, delete draft. Totals recomputed server-side.
+- [x] Quotes list page: filters by status, search, table like dashboard.
+- [x] Quote detail page (read view of a sent quote + activity timeline + actions).
+- [x] Job photo upload (client-side compression to 1600px), before/after tag.
 
 ## Phase 4 — Voice → quote (Day 15–18)
 - [ ] Recorder component: tap/hold, timer, live waveform, 120s cap, cancel, MIME fallback.
@@ -120,3 +120,10 @@ _Record ambiguous choices here with date and one-line reason._
 - 2026-10-04: Starter price items (`lib/trade-seeds.ts`) are 5 per trade; labour = multiples of the user's hourly rate, call-out uses the user's fee, fixed USD amounts are scaled x0.8 (GBP) / x1.5 (AUD) to whole units. They are approximate and editable. US spelling "meter" vs "metre" follows the country.
 - 2026-10-04: Settings are nested routes (`/settings/business|regional|numbering|payment-link`), each form with its own action and an explicit column whitelist; country and currency are not editable after onboarding. Billing, Reminders and Data export are disabled "Coming soon" entries.
 - 2026-10-04: `/quotes/new` is a "Coming soon" placeholder so the mobile mic FAB never 404s.
+- 2026-10-04: Phase 3 adds migration `005_save_quote.sql` (`save_quote`): saving a draft and replacing its items must be one transaction, which separate API calls cannot give. It is SECURITY INVOKER, locks the quote row, refuses non-drafts, and rolls back on any bad item (smoke-tested in PGlite). It must be run before quotes can be saved.
+- 2026-10-04: Server recomputes line amounts, subtotal, tax, total, `tax_rate_bps` snapshot and currency on every draft save from the business settings (`lib/quote-helpers.ts` `buildSavePayload`); client totals are never accepted. Tax is rounded once on the subtotal.
+- 2026-10-04: Customers: an explicitly chosen (linked) customer is updated with the form's contact details; an automatic match (same name + phone or postcode) is reused without changes; otherwise a new customer is created. Customer name is required to save a draft.
+- 2026-10-04: Fully blank item rows (no description, no rate) are ignored on save. A rate left blank is stored as 0; `needs_price` is kept only while the rate is 0. Choosing a price-book material applies its markup to the rate. When the deposit toggle is off the typed percent is kept if valid, else 3000 bps.
+- 2026-10-04: Valid-until uses the native date input (no picker dependency). Drag handle transforms are written by hand so `@dnd-kit/utilities` is not needed. Unsaved-changes guard covers tab close/refresh and in-app links; the browser Back button cannot be intercepted by the App Router.
+- 2026-10-04: Activity events logged now: `quote.created` and `quote.duplicated` only. Duplicate does not copy photos, tokens, timestamps or voice data. Number gaps are possible if a save fails after `next_doc_number`.
+- 2026-10-04: Job photos: re-encoded to JPEG (max 1600px, quality 0.8) in the browser, stored at `job-photos/{business_id}/{quote_id}/{uuid}.jpg`, capped at 10 per quote on the server, shown via 1-hour signed URLs. Photos can only be added to drafts.

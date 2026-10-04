@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseMoneyToCents, parsePercentToBps } from "@/lib/money-input";
+import { isValidDateString } from "@/lib/quote-calc";
 
 /**
  * Validation toolkit shared by the onboarding, price-book and settings schemas.
@@ -70,6 +71,39 @@ export class Check {
       return allowed[0];
     }
     return n;
+  }
+
+  /** Quantity with up to 2 decimals, above 0. Returns 1 on error (the issue is recorded). */
+  quantity(path: string, value: string, opts: { max?: number } = {}): number {
+    const text = value.trim();
+    const n = /^\d*\.?\d{0,2}$/.test(text) && text !== "" && text !== "." ? Number(text) : NaN;
+    if (!(n > 0) || n > (opts.max ?? 100000)) {
+      this.fail(path, "Enter a quantity above 0, like 1 or 1.5.");
+      return 1;
+    }
+    return n;
+  }
+
+  /** A calendar date as yyyy-mm-dd, or null when blank. */
+  date(path: string, value: string): string | null {
+    const v = value.trim();
+    if (v === "") return null;
+    if (!isValidDateString(v)) {
+      this.fail(path, "Enter a valid date.");
+      return null;
+    }
+    return v;
+  }
+
+  /** A uuid, or null when blank. */
+  uuid(path: string, value: string): string | null {
+    const v = value.trim();
+    if (v === "") return null;
+    if (!z.uuid().safeParse(v).success) {
+      this.fail(path, "That selection is no longer valid.");
+      return null;
+    }
+    return v;
   }
 
   /** Money in cents. Blank is allowed only when `required` is false (then 0). */

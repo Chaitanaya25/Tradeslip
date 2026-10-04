@@ -218,6 +218,90 @@ describe.skipIf(!configured)("Row Level Security", () => {
     });
   });
 
+  describe("quotes, items and photos (Phase 3)", () => {
+    const fields = (title: string) => ({
+      customer_id: null,
+      title,
+      notes: null,
+      valid_until: "2026-12-01",
+      deposit_enabled: false,
+      deposit_bps: 3000,
+      include_photos: false,
+      subtotal_cents: 1000,
+      tax_cents: 0,
+      total_cents: 1000,
+      tax_rate_bps: 0,
+      currency: "USD",
+    });
+    const item = (description: string) => [
+      { position: 0, description, type: "labour", qty: 1, unit_rate_cents: 1000, amount_cents: 1000, price_item_id: null, needs_price: false },
+    ];
+
+    it("job photos: user A cannot read, insert or delete user B's photos", async () => {
+      const photo = await b.db
+        .from("job_photos")
+        .insert({ business_id: b.businessId, quote_id: b.quoteId, storage_path: `${b.businessId}/${b.quoteId}/x.jpg` })
+        .select("id")
+        .single();
+      expect(photo.error).toBeNull();
+
+      expect((await a.db.from("job_photos").select("id").eq("id", photo.data!.id)).data).toEqual([]);
+      const planted = await a.db
+        .from("job_photos")
+        .insert({ business_id: b.businessId, quote_id: b.quoteId, storage_path: "planted.jpg" });
+      expect(planted.error).not.toBeNull();
+      const attach = await a.db
+        .from("job_photos")
+        .insert({ business_id: a.businessId, quote_id: b.quoteId, storage_path: "cross.jpg" });
+      expect(attach.error).not.toBeNull();
+
+      await a.db.from("job_photos").delete().eq("id", photo.data!.id);
+      expect((await admin.from("job_photos").select("id").eq("id", photo.data!.id)).data).toHaveLength(1);
+    });
+
+    it("save_quote replaces a draft's items in one go", async () => {
+      const first = await a.db.rpc("save_quote", { p_quote_id: a.quoteId, p_fields: fields("Saved once"), p_items: item("First") });
+      expect(first.error).toBeNull();
+      const again = await a.db.rpc("save_quote", { p_quote_id: a.quoteId, p_fields: fields("Saved twice"), p_items: item("Second") });
+      expect(again.error).toBeNull();
+
+      const rows = await admin.from("quote_items").select("description").eq("quote_id", a.quoteId);
+      expect(rows.data?.map((r) => r.description)).toEqual(["Second"]);
+      const quote = await admin.from("quotes").select("title, total_cents").eq("id", a.quoteId).single();
+      expect(quote.data).toEqual({ title: "Saved twice", total_cents: 1000 });
+    });
+
+    it("save_quote refuses another user's quote and leaves it untouched", async () => {
+      const result = await a.db.rpc("save_quote", { p_quote_id: b.quoteId, p_fields: fields("Hijacked"), p_items: item("Hijacked") });
+      expect(result.error).not.toBeNull();
+      const quote = await admin.from("quotes").select("title").eq("id", b.quoteId).single();
+      expect(quote.data?.title).toBe("Quote b");
+    });
+
+    it("save_quote refuses quotes that are no longer drafts", async () => {
+      await admin.from("quotes").update({ status: "sent" }).eq("id", a.quoteId);
+      const result = await a.db.rpc("save_quote", { p_quote_id: a.quoteId, p_fields: fields("Too late"), p_items: item("Too late") });
+      expect(result.error).not.toBeNull();
+      const quote = await admin.from("quotes").select("title").eq("id", a.quoteId).single();
+      expect(quote.data?.title).toBe("Saved twice");
+      await admin.from("quotes").update({ status: "draft" }).eq("id", a.quoteId);
+    });
+
+    it("save_quote rolls back everything when an item is invalid", async () => {
+      const bad = [{ ...item("Bad")[0], type: "not-a-type" }];
+      const result = await a.db.rpc("save_quote", { p_quote_id: a.quoteId, p_fields: fields("Half saved"), p_items: bad });
+      expect(result.error).not.toBeNull();
+      const rows = await admin.from("quote_items").select("description").eq("quote_id", a.quoteId);
+      expect(rows.data?.map((r) => r.description)).toEqual(["Second"]);
+    });
+
+    it("signed-out clients cannot call save_quote", async () => {
+      const anon = newClient(anonKey!);
+      const result = await anon.rpc("save_quote", { p_quote_id: a.quoteId, p_fields: fields("Anon"), p_items: item("Anon") });
+      expect(result.error).not.toBeNull();
+    });
+  });
+
   describe("server-controlled data", () => {
     it("an owner cannot change their own plan or billing columns", async () => {
       await a.db.from("businesses").update({ plan: "business", paddle_subscription_id: "sub_fake" }).eq("id", a.businessId);
