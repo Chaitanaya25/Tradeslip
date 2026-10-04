@@ -39,6 +39,9 @@ export const quoteInputSchema = z
     deposit_enabled: z.boolean(),
     deposit_percent: z.string(),
     include_photos: z.boolean(),
+    // Voice note saved with the draft. Omitted (undefined) = leave as is; "" = clear it.
+    voice_note_path: z.string().optional(),
+    transcript: z.string().optional(),
     items: z.array(itemShape).max(MAX_ITEMS, `A quote can have up to ${MAX_ITEMS} items.`),
   })
   .transform((v, ctx) => {
@@ -105,6 +108,8 @@ export const quoteInputSchema = z
       deposit_enabled: v.deposit_enabled,
       deposit_bps,
       include_photos: v.include_photos,
+      voice_note_path: v.voice_note_path === undefined ? undefined : c.text("voice_note_path", v.voice_note_path, { label: "a voice note", max: 200 }) || null,
+      transcript: v.transcript === undefined ? undefined : c.text("transcript", v.transcript, { label: "a transcript", max: 5000 }) || null,
       items,
     };
     return c.done(ctx, out);

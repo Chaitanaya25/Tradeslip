@@ -69,6 +69,8 @@ export type SaveDoc = {
   depositBps: number;
   includePhotos: boolean;
   items: readonly DocItem[];
+  /** Voice note to store. Leave undefined to keep whatever the quote already has. */
+  voice?: { path: string | null; transcript: string | null };
 };
 
 export type BusinessSnapshot = { taxEnabled: boolean; taxRateBps: number; currency: string };
@@ -100,6 +102,8 @@ export function buildSavePayload(doc: SaveDoc, business: BusinessSnapshot) {
       // Snapshot of the rate used (0 when tax is off) and the business currency.
       tax_rate_bps: business.taxEnabled ? business.taxRateBps : 0,
       currency: business.currency,
+      // Only present when the caller supplied them, so the database keeps existing values otherwise.
+      ...(doc.voice ? { voice_note_path: doc.voice.path, transcript: doc.voice.transcript } : {}),
     },
     // Order in the array is the display order; the database stores position = index.
     items: doc.items.map((item, position) => ({

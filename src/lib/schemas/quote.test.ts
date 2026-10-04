@@ -111,6 +111,25 @@ describe("quoteInputSchema: quote fields", () => {
   });
 });
 
+describe("quoteInputSchema: voice note", () => {
+  it("leaves the fields undefined when not supplied", () => {
+    const q = quoteInputSchema.parse(base());
+    expect(q.voice_note_path).toBeUndefined();
+    expect(q.transcript).toBeUndefined();
+  });
+  it("trims, keeps and clears", () => {
+    const q = quoteInputSchema.parse({ ...base(), voice_note_path: " b/x.webm ", transcript: " hello " });
+    expect(q.voice_note_path).toBe("b/x.webm");
+    expect(q.transcript).toBe("hello");
+    const cleared = quoteInputSchema.parse({ ...base(), voice_note_path: "", transcript: "" });
+    expect(cleared.voice_note_path).toBeNull();
+    expect(cleared.transcript).toBeNull();
+  });
+  it("rejects an enormous transcript", () => {
+    expect(errors({ ...base(), transcript: "a".repeat(5001) })).toHaveProperty("transcript");
+  });
+});
+
 describe("validateQuoteForSending", () => {
   it("passes a complete quote", () => {
     expect(validateQuoteForSending(quoteInputSchema.parse(base()))).toEqual([]);

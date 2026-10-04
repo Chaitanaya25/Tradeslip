@@ -377,6 +377,18 @@ export type Database = {
         Args: { p_quote_id: string; p_fields: Json; p_items: Json };
         Returns: undefined;
       };
+      increment_ai_drafts: {
+        Args: { p_business_id: string; p_period: string; p_limit: number };
+        Returns: number | null;
+      };
+      refund_ai_draft: {
+        Args: { p_business_id: string; p_period: string };
+        Returns: undefined;
+      };
+      rate_limit_hit: {
+        Args: { p_ip: string; p_key: string; p_window_start: string };
+        Returns: number;
+      };
       dashboard_stats: {
         Args: { p_business_id: string };
         Returns: {

@@ -61,3 +61,16 @@ export async function loadPhotos(businessId: string, quoteId: string): Promise<P
   const urlByPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
   return rows.map((r) => ({ id: r.id, kind: r.kind, storagePath: r.storage_path, url: urlByPath.get(r.storage_path) ?? null }));
 }
+
+/** Voice drafting is on unless switched off with AI_DRAFTING_ENABLED=false, and needs a Gemini key. */
+export function aiDraftingAvailable(): boolean {
+  return process.env.AI_DRAFTING_ENABLED !== "false" && Boolean(process.env.GEMINI_API_KEY);
+}
+
+/** 1-hour signed URL to play back a saved voice note (the bucket is private). */
+export async function voiceNoteUrl(path: string | null): Promise<string | null> {
+  if (!path) return null;
+  const supabase = await createClient();
+  const { data } = await supabase.storage.from("voice-notes").createSignedUrl(path, 60 * 60);
+  return data?.signedUrl ?? null;
+}

@@ -39,12 +39,12 @@ Work top to bottom. One task at a time. After each: `pnpm typecheck && pnpm lint
 - [x] Job photo upload (client-side compression to 1600px), before/after tag.
 
 ## Phase 4 — Voice → quote (Day 15–18)
-- [ ] Recorder component: tap/hold, timer, live waveform, 120s cap, cancel, MIME fallback.
-- [ ] Signed upload to `voice-notes`.
-- [ ] `/api/ai/draft-quote`: plan + usage check, Gemini call with structured output, zod validation, one retry.
-- [ ] Deterministic post-processing (price-book overwrite, needs_price, markup, totals, customer match) + unit tests with fixture AI outputs.
-- [ ] Wire into builder: transcript card, "Drafted from your price book", populate form; manual entry still works.
-- [ ] Mic entry points: dashboard mic button and New Quote → recorder sheet.
+- [x] Recorder component: tap/hold, timer, live waveform, 120s cap, cancel, MIME fallback.
+- [x] Signed upload to `voice-notes`.
+- [x] `/api/ai/draft-quote`: plan + usage check, Gemini call with structured output, zod validation, one retry.
+- [x] Deterministic post-processing (price-book overwrite, needs_price, markup, totals, customer match) + unit tests with fixture AI outputs.
+- [x] Wire into builder: transcript card, "Drafted from your price book", populate form; manual entry still works.
+- [x] Mic entry points: dashboard mic button and New Quote → recorder sheet.
 
 ## Phase 5 — Sending & public pages (Day 19–22)
 - [ ] `public_token` generation; Send sheet (copy link, email via Resend, SMS + WhatsApp deep links).
@@ -127,3 +127,10 @@ _Record ambiguous choices here with date and one-line reason._
 - 2026-10-04: Valid-until uses the native date input (no picker dependency). Drag handle transforms are written by hand so `@dnd-kit/utilities` is not needed. Unsaved-changes guard covers tab close/refresh and in-app links; the browser Back button cannot be intercepted by the App Router.
 - 2026-10-04: Activity events logged now: `quote.created` and `quote.duplicated` only. Duplicate does not copy photos, tokens, timestamps or voice data. Number gaps are possible if a save fails after `next_doc_number`.
 - 2026-10-04: Job photos: re-encoded to JPEG (max 1600px, quality 0.8) in the browser, stored at `job-photos/{business_id}/{quote_id}/{uuid}.jpg`, capped at 10 per quote on the server, shown via 1-hour signed URLs. Photos can only be added to drafts.
+- 2026-10-04: Phase 4 adds migration `006_voice_and_limits.sql`: `save_quote` also stores `voice_note_path` and `transcript` (only when those keys are sent, so duplicate never clears them), plus service-role-only atomic counters `increment_ai_drafts` (reserve with limit check in one statement), `refund_ai_draft` and `rate_limit_hit`. Owners still cannot write `usage_counters` or `rate_limits`; the service-role client is used only in `server/ai/usage.ts` after the user, business and voice path are verified.
+- 2026-10-04: Model is `gemini-3.5-flash-lite` as requested, in one constant with a `GEMINI_MODEL` env override; I could not confirm the id exists until the first live call (a "model not found" error maps to a friendly message). Only new dependency: `@google/genai` (official SDK: inline audio, structured JSON output config, token usage).
+- 2026-10-04: Limits: trial and free 10 drafts per month, pro and business 300 (business-timezone month), 5 requests per minute per user (fixed one-minute window, key stored in `rate_limits.ip` as `user:{id}`). A draft is reserved before the Gemini call and refunded if the call fails before producing a result; parse failures still count (the cost was incurred).
+- 2026-10-04: The 120 second cap is enforced by the recorder (auto-stop) plus a 10 MB audio size cap on the server; the server does not decode audio to measure its duration.
+- 2026-10-04: Post-processing is the only thing that decides prices: a known price-book id gets the book rate (markup applied to materials) whatever the AI said; unknown ids are dropped; spoken prices above $100,000 or negative are treated as unpriced; call-out items are added only if the speaker says call-out, or the business charges one and the speech clearly describes a site visit (small phrase list), and never duplicated.
+- 2026-10-04: Applying a draft replaces customer, title, notes and items (after a confirm if the form already has content) and sets the voice note + transcript on the form; nothing is saved until Save draft. A draft with no items and no customer only stores the transcript. Re-recording or abandoning a recording leaves the old voice file behind (cleanup is a documented future task); deleting a draft deletes its voice note.
+- 2026-10-04: `AI_DRAFTING_ENABLED=false` (or a missing `GEMINI_API_KEY`) shows the manual-entry message in the voice card and the API returns 503. Mic buttons on the mobile bar, Quotes header and Dashboard open `/quotes/new?record=1`.

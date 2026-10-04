@@ -11,9 +11,10 @@ All schema lives in plain SQL files. You do not need Docker or `supabase start`.
 | `migrations/003_functions.sql` | `next_doc_number`, `dashboard_stats`, `monthly_invoice_totals` |
 | `migrations/004_storage.sql` | Buckets `logos` / `voice-notes` / `job-photos` and path policies |
 | `migrations/005_save_quote.sql` | `save_quote`: saves a draft quote and its items in one transaction |
+| `migrations/006_voice_and_limits.sql` | `save_quote` stores voice note + transcript; atomic AI-draft and rate-limit counters (service role only) |
 | `seed.sql` | `seed_demo_data(owner uuid)` — demo business "Miller Plumbing" |
 
-Run them **in this order: 001, 002, 003, 004, 005, then seed.sql.** Each file is safe to run twice.
+Run them **in this order: 001, 002, 003, 004, 005, 006, then seed.sql.** Each file is safe to run twice.
 
 ## Option A — SQL editor (simplest)
 
@@ -83,7 +84,7 @@ user B's businesses, customers, quotes or quote items. It creates and deletes us
 **Use a separate throwaway Supabase project for this. Never point it at your main project.**
 
 1. Create a new empty Supabase project.
-2. Run migrations 001–005 on it.
+2. Run migrations 001–006 on it.
 3. Create `.env.test.local` in the repo root:
 
 ```
@@ -94,3 +95,10 @@ TEST_SUPABASE_SERVICE_ROLE_KEY=...
 
 4. Run `pnpm test`. Without these variables the RLS tests are skipped with a message, and the
    suite refuses to run if `TEST_SUPABASE_URL` equals `NEXT_PUBLIC_SUPABASE_URL`.
+
+## Voice notes
+
+Recordings are stored in the private `voice-notes` bucket at `{business_id}/{uuid}.{ext}`. A voice note is
+deleted when its draft quote is deleted. Re-recording on the same draft leaves the previous file behind, and
+an abandoned recording (never saved to a quote) stays too. **Future task:** a scheduled cleanup of voice notes
+older than 30 days that no quote references.

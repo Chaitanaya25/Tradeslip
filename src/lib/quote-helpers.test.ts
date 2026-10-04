@@ -82,6 +82,19 @@ describe("buildSavePayload", () => {
   });
 });
 
+describe("buildSavePayload: voice note", () => {
+  const doc = { customerId: null, title: null, notes: null, validUntil: null, depositEnabled: false, depositBps: 3000, includePhotos: false, items: [] as DocItem[] };
+  it("omits the voice fields unless supplied, so the database keeps what it has", () => {
+    const f = buildSavePayload(doc, business).fields;
+    expect(f).not.toHaveProperty("voice_note_path");
+    expect(f).not.toHaveProperty("transcript");
+  });
+  it("includes them when supplied (null clears)", () => {
+    expect(buildSavePayload({ ...doc, voice: { path: "b/x.webm", transcript: "hi" } }, business).fields).toMatchObject({ voice_note_path: "b/x.webm", transcript: "hi" });
+    expect(buildSavePayload({ ...doc, voice: { path: null, transcript: null } }, business).fields).toMatchObject({ voice_note_path: null, transcript: null });
+  });
+});
+
 describe("buildDuplicatePayload", () => {
   const source = { customer_id: "c1", title: "Kitchen tap", notes: "Old tap taken away.", deposit_enabled: true, deposit_bps: 3000, include_photos: true };
   const dup = buildDuplicatePayload(source, items, { ...business, quoteValidityDays: 30 }, "2026-10-04");

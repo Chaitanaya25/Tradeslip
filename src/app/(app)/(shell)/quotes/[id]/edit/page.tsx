@@ -3,7 +3,7 @@ import { z } from "zod";
 import { QuoteBuilder } from "@/components/quotes/quote-builder";
 import { requireBusiness } from "@/lib/auth/session";
 import { formatBpsAsPercent, formatCentsForInput } from "@/lib/money-input";
-import { builderConfig, loadBuilderOptions, loadPhotos } from "@/lib/quote-queries";
+import { aiDraftingAvailable, builderConfig, loadBuilderOptions, loadPhotos, voiceNoteUrl } from "@/lib/quote-queries";
 import { emptyCustomer, type QuoteFormValues } from "@/lib/schemas/quote";
 import { createClient } from "@/lib/supabase/server";
 
@@ -26,10 +26,11 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
   // Only drafts are editable; everything else is read-only on the detail page.
   if (quote.status !== "draft") redirect(`/quotes/${id}`);
 
-  const [{ data: items }, options, photos] = await Promise.all([
+  const [{ data: items }, options, photos, voiceAudioUrl] = await Promise.all([
     supabase.from("quote_items").select("*").eq("quote_id", id).order("position"),
     loadBuilderOptions(business.id),
     loadPhotos(business.id, id),
+    voiceNoteUrl(quote.voice_note_path),
   ]);
 
   const c = quote.customers;
@@ -52,6 +53,8 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
     deposit_enabled: quote.deposit_enabled,
     deposit_percent: formatBpsAsPercent(quote.deposit_bps),
     include_photos: quote.include_photos,
+    voice_note_path: quote.voice_note_path ?? "",
+    transcript: quote.transcript ?? "",
     items: (items ?? []).map((i) => ({
       description: i.description,
       type: i.type,
@@ -71,6 +74,9 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
       customers={options.customers}
       priceItems={options.priceItems}
       photos={photos}
+      aiEnabled={aiDraftingAvailable()}
+      autoRecord={false}
+      voiceAudioUrl={voiceAudioUrl}
       initialValues={initialValues}
     />
   );

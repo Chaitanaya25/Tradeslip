@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Controller, FormProvider, useForm, useWatch, type Resolver } from "react-hook-form";
+import { Controller, FormProvider, useFieldArray, useForm, useWatch, type Resolver } from "react-hook-form";
 import { ArrowLeft, Copy, MoreHorizontal, Send, Trash2 } from "lucide-react";
 import { CustomerCard } from "@/components/quotes/customer-card";
 import { JobPhotos } from "@/components/quotes/job-photos";
@@ -11,7 +11,7 @@ import { LineItemsEditor, previewQty, previewRateCents } from "@/components/quot
 import { TotalsBlock } from "@/components/quotes/totals-block";
 import type { BuilderConfig, CustomerOption, PriceItemOption } from "@/components/quotes/types";
 import { useUnsavedGuard } from "@/components/quotes/use-unsaved-guard";
-import { VoiceNoteCard } from "@/components/quotes/voice-note-card";
+import { VoiceNoteCard, type VoiceAudio } from "@/components/quotes/voice-note-card";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -31,9 +31,10 @@ import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { zodResolver } from "@/lib/forms";
 import { formatMoney } from "@/lib/money";
-import { parsePercentToBps } from "@/lib/money-input";
+import { formatCentsForInput, parsePercentToBps } from "@/lib/money-input";
 import { calculateQuoteTotals, depositCents } from "@/lib/quote-calc";
 import { quoteInputSchema, type QuoteFormValues } from "@/lib/schemas/quote";
+import type { DraftApiResponse } from "@/app/api/ai/draft-quote/route";
 import { deleteDraftQuote, duplicateQuote, saveQuoteDraft } from "@/server/actions/quotes";
 import type { PhotoDto } from "@/server/actions/quote-photos";
 
@@ -62,7 +63,14 @@ export function QuoteBuilder({
   customers,
   priceItems,
   photos,
+  aiEnabled,
+  autoRecord,
+  voiceAudioUrl,
 }: {
+  aiEnabled: boolean;
+  autoRecord: boolean;
+  /** Signed URL for a voice note already saved on this draft. */
+  voiceAudioUrl: string | null;
   quoteId: string | null;
   number: number | null;
   businessId: string;
@@ -77,15 +85,23 @@ export function QuoteBuilder({
   const [pending, startTransition] = useTransition();
   const [formError, setFormError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [voiceAudio, setVoiceAudio] = useState<VoiceAudio | null>(
+    voiceAudioUrl ? { url: voiceAudioUrl, durationSeconds: null } : null,
+  );
+  const [pendingDraft, setPendingDraft] = useState<{ draft: DraftApiResponse; audio: VoiceAudio } | null>(null);
 
   const resolver = useMemo(() => zodResolver(quoteInputSchema) as unknown as Resolver<QuoteFormValues>, []);
   const form = useForm<QuoteFormValues>({ resolver, defaultValues: initialValues });
-  const { control, register, handleSubmit, getValues, reset, setError, formState } = form;
+  const { control, register, handleSubmit, getValues, setValue, reset, setError, formState } = form;
+  const fieldArray = useFieldArray({ control, name: "items" });
   const { dialog: unsavedDialog } = useUnsavedGuard(formState.isDirty);
 
   const items = useWatch({ control, name: "items" });
   const depositEnabled = useWatch({ control, name: "deposit_enabled" });
   const depositPercent = useWatch({ control, name: "deposit_percent" });
+  const transcript = useWatch({ control, name: "transcript" }) ?? "";
+  const needsPriceCount = (items ?? []).filter((i) => i.needs_price && previewRateCents(i.rate) === 0).length;
+  const fromPriceBook = (items ?? []).some((i) => i.price_item_id);
 
   // Live preview only. The server recomputes everything when saving.
   const totals = useMemo(
@@ -102,6 +118,61 @@ export function QuoteBuilder({
 
   const word = config.quoteWord;
   const heading = number ? `${word} #${config.docPrefix}${number}` : `New ${word.toLowerCase()}`;
+
+  /** Fill the form from a voice draft. Nothing is saved until "Save draft". */
+  function applyDraft(draft: DraftApiResponse, audio: VoiceAudio) {
+    const opts = { shouldDirty: true } as const;
+    setVoiceAudio(audio.url ? audio : null);
+    setValue("voice_note_path", draft.voiceNotePath, opts);
+    setValue("transcript", draft.transcript, opts);
+
+    if (draft.items.length === 0 && !draft.customer.name) {
+      toast.error("We couldn't pick out a job from that recording. Your transcript is kept; fill the quote in by hand or record again.");
+      return;
+    }
+
+    const known = draft.customer.customer_id ? customers.find((c) => c.id === draft.customer.customer_id) : undefined;
+    const c = draft.customer;
+    setValue("customer.customer_id", known?.id ?? "", opts);
+    setValue("customer.name", known?.name ?? c.name, opts);
+    setValue("customer.email", known?.email ?? c.email, opts);
+    setValue("customer.phone", known?.phone ?? c.phone, opts);
+    setValue("customer.address_line1", known?.address_line1 ?? c.address_line1, opts);
+    setValue("customer.city", known?.city ?? c.city, opts);
+    setValue("customer.region", known?.region ?? c.region, opts);
+    setValue("customer.postcode", known?.postcode ?? c.postcode, opts);
+    setValue("title", draft.job_title, opts);
+    setValue("notes", draft.notes ?? "", opts);
+
+    if (draft.items.length > 0) {
+      fieldArray.replace(
+        draft.items.map((i) => ({
+          description: i.description,
+          type: i.type,
+          qty: String(i.qty),
+          rate: i.unit_rate_cents === 0 && i.needs_price ? "" : formatCentsForInput(i.unit_rate_cents),
+          price_item_id: i.price_item_id ?? "",
+          needs_price: i.needs_price,
+        })),
+      );
+    }
+    toast.success(draft.degraded ? "We only caught the words. Check and fill in the details." : "Draft ready. Check it over, then save.");
+  }
+
+  function onDraft(draft: DraftApiResponse, audio: VoiceAudio) {
+    const values = getValues();
+    const hasContent =
+      values.customer.name.trim() !== "" || values.items.some((i) => i.description.trim() !== "" || i.rate.trim() !== "");
+    if (hasContent && (draft.items.length > 0 || draft.customer.name)) setPendingDraft({ draft, audio });
+    else applyDraft(draft, audio);
+  }
+
+  function clearVoice() {
+    const opts = { shouldDirty: true } as const;
+    setValue("voice_note_path", "", opts);
+    setValue("transcript", "", opts);
+    setVoiceAudio(null);
+  }
 
   const save = handleSubmit(() => {
     setFormError(null);
@@ -165,7 +236,16 @@ export function QuoteBuilder({
 
       <form onSubmit={save} noValidate className="grid items-start gap-6 lg:grid-cols-5">
         <div className="space-y-6 lg:col-span-2">
-          <VoiceNoteCard />
+          <VoiceNoteCard
+            aiEnabled={aiEnabled}
+            businessId={businessId}
+            autoRecord={autoRecord}
+            transcript={transcript}
+            audio={voiceAudio}
+            fromPriceBook={fromPriceBook}
+            onDraft={onDraft}
+            onClear={clearVoice}
+          />
           <CustomerCard customers={customers} country={config.country} />
         </div>
 
@@ -221,7 +301,12 @@ export function QuoteBuilder({
               <Input id="title" autoComplete="off" placeholder="Kitchen tap replacement" {...register("title")} />
             </FormField>
 
-            <LineItemsEditor config={config} priceItems={priceItems} />
+            {needsPriceCount > 0 ? (
+              <p role="status" className="rounded-lg border border-accent-border bg-accent-soft px-4 py-3 text-[15px] font-medium text-accent">
+                {needsPriceCount === 1 ? "1 item needs a price" : `${needsPriceCount} items need a price`}
+              </p>
+            ) : null}
+            <LineItemsEditor config={config} priceItems={priceItems} fieldArray={fieldArray} />
 
             <div className="border-t border-border pt-5">
               <TotalsBlock
@@ -314,6 +399,20 @@ export function QuoteBuilder({
       </form>
 
       {unsavedDialog}
+      <ConfirmDialog
+        open={pendingDraft !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDraft(null);
+        }}
+        title="Replace what you have?"
+        description="Replace what you have with the new draft? The customer, job title, items and notes will be overwritten."
+        cancelLabel="Keep mine"
+        confirmLabel="Replace"
+        onConfirm={() => {
+          if (pendingDraft) applyDraft(pendingDraft.draft, pendingDraft.audio);
+          setPendingDraft(null);
+        }}
+      />
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}

@@ -12,6 +12,7 @@ import {
   findMatchingCustomer,
   type DocItem,
 } from "@/lib/quote-helpers";
+import { isValidVoicePath } from "@/lib/voice";
 import { quoteInputSchema, type QuoteFormValues, type QuoteInput } from "@/lib/schemas/quote";
 import type { Business } from "@/lib/supabase/tables";
 import { actionBusinessContext } from "./context";
@@ -124,6 +125,11 @@ export async function saveQuoteDraft(
   if (!parsed.success) return failure("Check the highlighted fields.", fieldErrorsFromIssues(parsed.error.issues));
   const input = parsed.data;
 
+  // A voice note must live in this business's own folder.
+  if (input.voice_note_path && !isValidVoicePath(input.voice_note_path, ctx.business.id)) {
+    return failure("That voice note isn't valid. Record it again.");
+  }
+
   let existing: { id: string; number: number } | null = null;
   if (quoteId) {
     if (!idSchema.safeParse(quoteId).success) return failure("That quote no longer exists.");
@@ -151,6 +157,10 @@ export async function saveQuoteDraft(
       depositBps: input.deposit_bps,
       includePhotos: input.include_photos,
       items: input.items satisfies DocItem[],
+      voice:
+        input.voice_note_path === undefined && input.transcript === undefined
+          ? undefined
+          : { path: input.voice_note_path ?? null, transcript: input.transcript ?? null },
     },
     businessSnapshot(ctx.business),
   );
@@ -263,7 +273,7 @@ export async function deleteDraftQuote(quoteId: string): Promise<ActionResult> {
 
   const { data: quote } = await ctx.supabase
     .from("quotes")
-    .select("id, status")
+    .select("id, status, voice_note_path")
     .eq("id", quoteId)
     .eq("business_id", ctx.business.id)
     .maybeSingle();
@@ -277,6 +287,10 @@ export async function deleteDraftQuote(quoteId: string): Promise<ActionResult> {
     .eq("business_id", ctx.business.id);
   const paths = (photos ?? []).map((p) => p.storage_path);
   if (paths.length > 0) await ctx.supabase.storage.from("job-photos").remove(paths);
+  // The recording goes with the draft (only if it is inside this business's folder).
+  if (quote.voice_note_path && isValidVoicePath(quote.voice_note_path, ctx.business.id)) {
+    await ctx.supabase.storage.from("voice-notes").remove([quote.voice_note_path]);
+  }
 
   // quote_items and job_photos rows go with the quote (ON DELETE CASCADE).
   const { data: deleted, error } = await ctx.supabase

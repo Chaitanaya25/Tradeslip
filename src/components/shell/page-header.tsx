@@ -26,10 +26,10 @@ export function PageHeader({
 }
 
 /** Stand-in for pages built in a later phase. */
-export function ComingSoon({ title }: { title: string }) {
+export function ComingSoon({ title, actions }: { title: string; actions?: ReactNode }) {
   return (
     <>
-      <PageHeader title={title} />
+      <PageHeader title={title} actions={actions} />
       <Card>
         <p className="text-body text-text-muted">Coming soon.</p>
       </Card>

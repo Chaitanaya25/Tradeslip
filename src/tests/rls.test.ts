@@ -302,6 +302,63 @@ describe.skipIf(!configured)("Row Level Security", () => {
     });
   });
 
+  describe("voice notes (Phase 4)", () => {
+    const audio = new Blob([new Uint8Array([1, 2, 3, 4])], { type: "audio/webm" });
+    const name = () => `${crypto.randomUUID()}.webm`;
+
+    it("each user can write and read their own folder", async () => {
+      const path = `${a.businessId}/${name()}`;
+      const up = await a.db.storage.from("voice-notes").upload(path, audio, { contentType: "audio/webm" });
+      expect(up.error).toBeNull();
+      const down = await a.db.storage.from("voice-notes").download(path);
+      expect(down.error).toBeNull();
+      await a.db.storage.from("voice-notes").remove([path]);
+    });
+
+    it("user A cannot upload into, read, list or delete user B's folder", async () => {
+      const path = `${b.businessId}/${name()}`;
+      const planted = await a.db.storage.from("voice-notes").upload(path, audio, { contentType: "audio/webm" });
+      expect(planted.error).not.toBeNull();
+
+      const bPath = `${b.businessId}/${name()}`;
+      expect((await b.db.storage.from("voice-notes").upload(bPath, audio, { contentType: "audio/webm" })).error).toBeNull();
+
+      expect((await a.db.storage.from("voice-notes").download(bPath)).error).not.toBeNull();
+      const listed = await a.db.storage.from("voice-notes").list(b.businessId);
+      expect(listed.data ?? []).toEqual([]);
+      await a.db.storage.from("voice-notes").remove([bPath]);
+      expect((await admin.storage.from("voice-notes").download(bPath)).error).toBeNull(); // still there
+
+      await admin.storage.from("voice-notes").remove([bPath]);
+    });
+
+    it("a signed-out client cannot read voice notes", async () => {
+      const anon = newClient(anonKey!);
+      expect((await anon.storage.from("voice-notes").download(`${a.businessId}/${name()}`)).error).not.toBeNull();
+    });
+
+    it("owners cannot call the usage and rate-limit counter functions", async () => {
+      const limit = await a.db.rpc("increment_ai_drafts", { p_business_id: a.businessId, p_period: "2026-10", p_limit: 1000 });
+      expect(limit.error).not.toBeNull();
+      const hit = await a.db.rpc("rate_limit_hit", { p_ip: "user:x", p_key: "ai-draft", p_window_start: new Date().toISOString() });
+      expect(hit.error).not.toBeNull();
+      const refund = await a.db.rpc("refund_ai_draft", { p_business_id: a.businessId, p_period: "2026-10" });
+      expect(refund.error).not.toBeNull();
+    });
+
+    it("save_quote stores a voice note only when the keys are sent", async () => {
+      const fields = {
+        customer_id: null, title: "Voice", notes: null, valid_until: null, deposit_enabled: false, deposit_bps: 3000,
+        include_photos: false, subtotal_cents: 0, tax_cents: 0, total_cents: 0, tax_rate_bps: 0, currency: "USD",
+      };
+      const path = `${a.businessId}/${name()}`;
+      await a.db.rpc("save_quote", { p_quote_id: a.quoteId, p_fields: { ...fields, voice_note_path: path, transcript: "hello" }, p_items: [] });
+      await a.db.rpc("save_quote", { p_quote_id: a.quoteId, p_fields: fields, p_items: [] });
+      const row = await admin.from("quotes").select("voice_note_path, transcript").eq("id", a.quoteId).single();
+      expect(row.data).toEqual({ voice_note_path: path, transcript: "hello" });
+    });
+  });
+
   describe("server-controlled data", () => {
     it("an owner cannot change their own plan or billing columns", async () => {
       await a.db.from("businesses").update({ plan: "business", paddle_subscription_id: "sub_fake" }).eq("id", a.businessId);

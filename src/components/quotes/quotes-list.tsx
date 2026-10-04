@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Copy, ExternalLink, MoreHorizontal, Plus, Search, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, MoreHorizontal, Mic, Plus, Search, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shell/page-header";
 import { Button } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/card";
@@ -110,11 +110,18 @@ export function QuotesList({
         title="Quotes"
         description={quotes.length > 0 ? `${quotes.length} in total, newest first.` : undefined}
         actions={
-          <Button asChild>
-            <Link href="/quotes/new">
-              <Plus /> New {quoteWord.toLowerCase()}
-            </Link>
-          </Button>
+          <>
+            <Button asChild>
+              <Link href="/quotes/new">
+                <Plus /> New {quoteWord.toLowerCase()}
+              </Link>
+            </Button>
+            <Button asChild variant="icon">
+              <Link href="/quotes/new?record=1" aria-label="Record a voice quote">
+                <Mic />
+              </Link>
+            </Button>
+          </>
         }
       />
 

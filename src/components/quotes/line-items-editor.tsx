@@ -15,7 +15,7 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { Controller, useFieldArray, useFormContext, useWatch } from "react-hook-form";
+import { Controller, useFormContext, useWatch, type UseFieldArrayReturn } from "react-hook-form";
 import { Copy, GripVertical, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { PriceItemAutocomplete, quoteRateFor } from "@/components/quotes/price-item-autocomplete";
 import type { BuilderConfig, PriceItemOption } from "@/components/quotes/types";
@@ -203,12 +203,15 @@ function Row({
 export function LineItemsEditor({
   config,
   priceItems,
+  fieldArray,
 }: {
   config: BuilderConfig;
   priceItems: readonly PriceItemOption[];
+  /** Owned by the builder so a voice draft can replace the rows. */
+  fieldArray: UseFieldArrayReturn<QuoteFormValues, "items", "id">;
 }) {
-  const { control, getValues } = useFormContext<QuoteFormValues>();
-  const { fields, append, insert, remove, move } = useFieldArray({ control, name: "items" });
+  const { getValues } = useFormContext<QuoteFormValues>();
+  const { fields, append, insert, remove, move } = fieldArray;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),

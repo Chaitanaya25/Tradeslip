@@ -47,7 +47,7 @@ export function BottomTabBar() {
         <Tab href="/quotes" label="Quotes" icon={FileText} active={isActiveNav(pathname, "/quotes") && pathname !== "/quotes/new"} />
         <div className="flex justify-center">
           <Link
-            href="/quotes/new"
+            href="/quotes/new?record=1"
             aria-label="New quote by voice"
             className="-mt-7 flex size-14 items-center justify-center rounded-full bg-accent text-white ring-4 ring-bg transition-colors duration-150 hover:bg-accent-hover"
           >
