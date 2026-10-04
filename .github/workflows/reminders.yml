@@ -1,0 +1,29 @@
+# Calls the reminders route every hour. Use this (or cron-job.org) when Vercel Cron is not
+# available: the Vercel Hobby plan only allows daily crons, so hourly needs an external scheduler.
+#
+# Repository secrets to add (Settings > Secrets and variables > Actions):
+#   APP_URL      the deployed site, e.g. https://app.tradeslip.com (no trailing slash)
+#   CRON_SECRET  the same value as the CRON_SECRET environment variable on the server
+name: Send reminders
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /api/cron/reminders
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_URL}" ] || [ -z "${CRON_SECRET}" ]; then
+            echo "APP_URL and CRON_SECRET secrets are required" >&2
+            exit 1
+          fi
+          # -f fails on 401/5xx; the response is counts only (no personal data), so it is safe to print.
+          curl -fsS --max-time 60 -X POST -H "Authorization: Bearer ${CRON_SECRET}" "${APP_URL%/}/api/cron/reminders"

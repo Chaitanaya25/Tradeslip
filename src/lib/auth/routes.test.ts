@@ -10,6 +10,7 @@ describe("isPublicPath", () => {
     "/q/abc123",
     "/q/abc123/pdf",
     "/i/abc123",
+    "/unsubscribe/abc.def",
     "/api/cron/reminders",
     "/api/webhooks/paddle",
     "/login/",
@@ -35,6 +36,8 @@ describe("isPublicPath", () => {
     "/authx",
     "/login-help",
     "/api/cronjob",
+    "/unsubscribe",
+    "/unsubscribed",
   ])("protects %s", (path) => {
     expect(isPublicPath(path, true)).toBe(false);
   });

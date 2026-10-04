@@ -15,7 +15,7 @@ const PUBLIC_EXACT = new Set([
 
 // Customer pages (unguessable token), auth flow, and machine-to-machine routes
 // that carry their own secret (cron bearer token, webhook signature).
-const PUBLIC_PREFIXES = ["/auth/", "/q/", "/i/", "/api/cron/", "/api/webhooks/"];
+const PUBLIC_PREFIXES = ["/auth/", "/q/", "/i/", "/unsubscribe/", "/api/cron/", "/api/webhooks/"];
 
 export function isPublicPath(
   pathname: string,

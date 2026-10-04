@@ -37,6 +37,8 @@ export async function sendEmail(input: {
   replyTo?: string | null;
   subject: string;
   react: ReactElement;
+  /** Extra message headers, e.g. List-Unsubscribe on reminders. */
+  headers?: Record<string, string>;
 }): Promise<SendResult> {
   const key = process.env.RESEND_API_KEY?.trim();
   if (!key) return { ok: false, reason: "not_configured" };
@@ -50,6 +52,7 @@ export async function sendEmail(input: {
       subject: input.subject,
       html,
       text,
+      ...(input.headers ? { headers: input.headers } : {}),
     });
 
     if (error) {

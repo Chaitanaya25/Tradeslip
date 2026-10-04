@@ -23,6 +23,9 @@ const adminRpc: RateLimitRpc = async (subject, key, windowStart) => {
   return error || typeof data !== "number" ? null : data;
 };
 
+/** Subject for a signed-in user (rate limits on actions that cost money or send email). */
+export const userSubject = (userId: string) => `user:${userId.slice(0, 64)}`;
+
 /** Subject for an IP address. */
 export const ipSubject = (ip: string) => `ip:${ip.slice(0, 64)}`;
 
@@ -43,10 +46,12 @@ export function clientIp(forwardedFor: string | null, realIp: string | null): st
  */
 export async function checkRateLimits(
   checks: readonly RateLimitCheck[],
-  options: { rpc?: RateLimitRpc; now?: Date } = {},
+  options: { rpc?: RateLimitRpc; now?: Date; windowMs?: number } = {},
 ): Promise<{ allowed: boolean }> {
   const rpc = options.rpc ?? adminRpc;
-  const windowStart = rateLimitWindowStart(options.now);
+  const windowStart = options.windowMs
+    ? new Date(Math.floor((options.now ?? new Date()).getTime() / options.windowMs) * options.windowMs).toISOString()
+    : rateLimitWindowStart(options.now);
 
   let allowed = true;
   for (const check of checks) {

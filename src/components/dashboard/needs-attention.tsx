@@ -4,23 +4,32 @@ import { useState } from "react";
 import Link from "next/link";
 import { CircleAlert, Clock, FileText } from "lucide-react";
 import { CreateInvoiceButton } from "@/components/invoices/create-invoice-button";
-import { SendSheet } from "@/components/quotes/send-sheet";
+import { SendReminderDialog } from "@/components/reminders/send-reminder-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { IconTile } from "@/components/ui/icon-tile";
+import { useToast } from "@/components/ui/toast";
 import type { AttentionItem } from "@/lib/dashboard";
-import type { Country } from "@/lib/region";
-import { logInvoiceShared, sendInvoiceEmail } from "@/server/actions/invoice-sending";
-import { logQuoteShared, sendQuoteEmail } from "@/server/actions/quote-sending";
 
 const ICONS = { overdue_invoice: CircleAlert, expiring_quote: Clock, no_reply: FileText, create_invoice: FileText } as const;
 
 /**
- * Things that need the owner's attention. "Send reminder" and "Send follow up" open the normal
- * Send sheet for that document: the owner decides how to nudge. Nothing is sent automatically.
+ * Things that need the owner's attention. "Send reminder" and "Send follow up" ask for confirmation and then use the
+ * same pipeline as the automatic reminders (customer address on file, once, honest result). "Copy link" is the
+ * fallback for nudging by text or WhatsApp yourself.
  */
-export function NeedsAttention({ items, businessName, country, quoteWord }: { items: AttentionItem[]; businessName: string; country: Country; quoteWord: string }) {
+export function NeedsAttention({ items, quoteWord }: { items: AttentionItem[]; quoteWord: string }) {
   const [sharing, setSharing] = useState<AttentionItem | null>(null);
+  const toast = useToast();
+
+  async function copy(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success("Link copied.");
+    } catch {
+      toast.error("Couldn't copy automatically.");
+    }
+  }
 
   return (
     <Card className="lg:col-span-1">
@@ -40,7 +49,7 @@ export function NeedsAttention({ items, businessName, country, quoteWord }: { it
                   <p className="text-body-strong">{item.title}</p>
                   <p className="text-small text-text-muted">{item.meta}</p>
                 </div>
-                <div className="shrink-0">
+                <div className="flex shrink-0 flex-col items-end gap-1">
                   {item.type === "create_invoice" && item.quoteId ? (
                     <CreateInvoiceButton quoteId={item.quoteId} word={quoteWord} existingInvoiceId={null} variant="outline-accent" />
                   ) : item.share ? (
@@ -52,6 +61,11 @@ export function NeedsAttention({ items, businessName, country, quoteWord }: { it
                       <Link href={item.href}>{item.type === "overdue_invoice" || item.type === "no_reply" ? "Open" : item.actionLabel}</Link>
                     </Button>
                   )}
+                  {item.share ? (
+                    <button type="button" onClick={() => copy(item.share!.link)} className="text-small rounded-md font-medium text-text-muted hover:text-text hover:underline">
+                      Copy link
+                    </button>
+                  ) : null}
                 </div>
               </li>
             );
@@ -60,20 +74,15 @@ export function NeedsAttention({ items, businessName, country, quoteWord }: { it
       )}
 
       {sharing?.share ? (
-        <SendSheet
+        <SendReminderDialog
           open
           onOpenChange={(open) => {
             if (!open) setSharing(null);
           }}
-          link={sharing.share.link}
-          customer={sharing.share.customer}
-          businessName={businessName}
-          country={country}
-          quoteWord={sharing.share.docLabel}
-          usage={null}
-          justSent={false}
-          onEmail={(to) => (sharing.share!.kind === "invoice" ? sendInvoiceEmail(sharing.share!.id, to) : sendQuoteEmail(sharing.share!.id, to))}
-          onShared={(channel) => (sharing.share!.kind === "invoice" ? logInvoiceShared(sharing.share!.id, channel) : logQuoteShared(sharing.share!.id, channel))}
+          entity={sharing.share.kind}
+          id={sharing.share.id}
+          customerName={sharing.share.customer.name}
+          label={sharing.title}
         />
       ) : null}
     </Card>

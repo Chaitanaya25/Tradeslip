@@ -35,7 +35,7 @@ async function AttentionSection({ business }: { business: Business }) {
   } catch {
     return <CardError title="Needs attention" />;
   }
-  return <NeedsAttention items={items} businessName={business.name} country={business.country} quoteWord={quoteWord(business.country)} />;
+  return <NeedsAttention items={items} quoteWord={quoteWord(business.country)} />;
 }
 
 export async function ChartSection({ business }: { business: Business }) {

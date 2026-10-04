@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, MapPin } from "lucide-react";
 import { z } from "zod";
 import { CreateInvoiceButton } from "@/components/invoices/create-invoice-button";
+import { ReminderControl } from "@/components/reminders/reminder-control";
 import { QuoteActions } from "@/components/quotes/quote-actions";
 import { ScheduleField } from "@/components/quotes/schedule-field";
 import { TotalsBlock } from "@/components/quotes/totals-block";
@@ -15,9 +16,12 @@ import { formatBpsAsPercent } from "@/lib/money-input";
 import { quoteSendLimit, quoteSendsRemaining, usagePeriod } from "@/lib/plans";
 import { buildPublicUrl } from "@/lib/share-links";
 import { utcToZonedParts } from "@/lib/schedule";
-import { depositCents } from "@/lib/quote-calc";
+import { depositCents, todayInTimezone } from "@/lib/quote-calc";
 import { describeActivity } from "@/lib/quote-helpers";
 import { loadPhotos } from "@/lib/quote-queries";
+import { reminderInfoText } from "@/lib/reminder-messages";
+import { quoteReminderInfo, settingsFromBusiness } from "@/lib/reminders";
+import { effectiveStatus } from "@/lib/quote-send";
 import { REGIONS, quoteWord } from "@/lib/region";
 import { logoPublicUrl } from "@/lib/supabase/storage";
 import { createClient } from "@/lib/supabase/server";
@@ -72,6 +76,21 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
   const statusLabel = quote.status.charAt(0).toUpperCase() + quote.status.slice(1);
   const businessAddress = [business.address_line1, business.city, business.region, business.postcode].filter(Boolean).join(", ");
   const customerAddress = [c?.address_line1, c?.city, c?.region, c?.postcode].filter(Boolean).join(", ");
+
+  const reminderInfo = quoteReminderInfo(
+    {
+      status: quote.status,
+      validUntil: quote.valid_until,
+      sentAt: quote.sent_at,
+      followupCount: quote.followup_count,
+      lastFollowupAt: quote.last_followup_at,
+      customerEmail: c?.email ?? null,
+    },
+    business.timezone,
+    settingsFromBusiness(business),
+    business.plan,
+  );
+  const awaitingReply = (quote.status === "sent" || quote.status === "viewed") && effectiveStatus(quote.status, quote.valid_until, todayInTimezone(business.timezone)) !== "expired";
 
   return (
     <>
@@ -254,6 +273,19 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
             country={business.country}
             usage={{ limit: quoteSendLimit(business.plan), remaining: quoteSendsRemaining(business.plan, usedThisMonth) }}
           />
+
+          {awaitingReply ? (
+            <ReminderControl
+              entity="quote"
+              id={quote.id}
+              infoText={reminderInfoText(reminderInfo, "quote", locale)}
+              canSend={quote.followup_count === 0 && Boolean(c?.email)}
+              customerName={c?.name ?? null}
+              label={`${word} #${business.quote_prefix}${quote.number}`}
+            />
+          ) : quote.followup_count > 0 ? (
+            <ReminderControl entity="quote" id={quote.id} infoText={reminderInfoText(reminderInfo, "quote", locale)} canSend={false} customerName={c?.name ?? null} label="" />
+          ) : null}
 
           <Card>
             <h2 className="text-h2 mb-4">Activity</h2>

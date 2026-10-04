@@ -621,6 +621,74 @@ describe.skipIf(!configured)("Row Level Security", () => {
     });
   });
 
+  describe("reminders (Phase 8)", () => {
+    const today = new Date().toISOString().slice(0, 10);
+
+    it("reminder_log is readable by its own business only", async () => {
+      await admin.from("reminder_log").insert({ business_id: a.businessId, entity_type: "quote", entity_id: a.quoteId, kind: "quote_followup", status: "failed", reason: "rls-test" });
+      const own = await a.db.from("reminder_log").select("id").eq("reason", "rls-test");
+      expect((own.data ?? []).length).toBeGreaterThan(0);
+      const other = await b.db.from("reminder_log").select("id").eq("business_id", a.businessId);
+      expect(other.data ?? []).toHaveLength(0);
+    });
+
+    it("owners cannot write reminder_log or unsubscribed_emails", async () => {
+      for (const client of [a.db, b.db]) {
+        const log = await client.from("reminder_log").insert({ business_id: a.businessId, entity_type: "quote", entity_id: a.quoteId, kind: "quote_followup", status: "sent" });
+        expect(log.error).not.toBeNull();
+        const unsub = await client.from("unsubscribed_emails").insert({ business_id: a.businessId, email: "someone@example.com" });
+        expect(unsub.error).not.toBeNull();
+      }
+      await a.db.from("reminder_log").update({ status: "sent" }).eq("business_id", a.businessId);
+      const rows = await admin.from("reminder_log").select("status").eq("business_id", a.businessId).eq("status", "sent");
+      expect(rows.data ?? []).toHaveLength(0);
+    });
+
+    it("an owner can manage their own unsubscribe list but not another business's", async () => {
+      await admin.rpc("record_unsubscribe", { p_business_id: a.businessId, p_email: "Opt.Out@Example.com" });
+      const mine = await a.db.from("unsubscribed_emails").select("email");
+      expect((mine.data ?? []).map((r) => r.email)).toContain("opt.out@example.com");
+      expect((await b.db.from("unsubscribed_emails").select("email").eq("business_id", a.businessId)).data ?? []).toHaveLength(0);
+      await b.db.from("unsubscribed_emails").delete().eq("business_id", a.businessId);
+      const stillThere = await admin.from("unsubscribed_emails").select("email").eq("business_id", a.businessId);
+      expect((stillThere.data ?? []).length).toBeGreaterThan(0);
+      await a.db.from("unsubscribed_emails").delete().eq("email", "opt.out@example.com");
+    });
+
+    it("anonymous and signed-in clients cannot call the reminder functions", async () => {
+      const anon = newClient(anonKey!);
+      for (const client of [anon, a.db, b.db]) {
+        expect((await client.rpc("claim_reminder", { p_entity_type: "quote", p_entity_id: a.quoteId, p_kind: "quote_followup" })).error).not.toBeNull();
+        expect((await client.rpc("finalize_reminder", { p_claim_id: a.quoteId, p_status: "sent", p_reason: null, p_message_id: null })).error).not.toBeNull();
+        expect((await client.rpc("list_due_quote_followups", { p_now: new Date().toISOString(), p_limit: 5 })).error).not.toBeNull();
+        expect((await client.rpc("list_due_invoice_reminders", { p_now: new Date().toISOString(), p_limit: 5 })).error).not.toBeNull();
+        expect((await client.rpc("is_unsubscribed", { p_business_id: a.businessId, p_email: "x@y.co" })).error).not.toBeNull();
+        expect((await client.rpc("record_unsubscribe", { p_business_id: a.businessId, p_email: "x@y.co" })).error).not.toBeNull();
+        expect((await client.rpc("expire_due_quotes", { p_limit: 5 })).error).not.toBeNull();
+      }
+    });
+
+    it("the claim is exclusive, and a finished claim cannot be claimed again", async () => {
+      const first = await admin.rpc("claim_reminder", { p_entity_type: "quote", p_entity_id: a.quoteId, p_kind: "quote_followup" });
+      expect(typeof first.data).toBe("string");
+      const second = await admin.rpc("claim_reminder", { p_entity_type: "quote", p_entity_id: a.quoteId, p_kind: "quote_followup" });
+      expect(second.data).toBeNull();
+      const done = await admin.rpc("finalize_reminder", { p_claim_id: first.data as string, p_status: "failed", p_reason: "rls-test", p_message_id: null });
+      expect(done.data).toBe(true);
+    });
+
+    it("reminder settings are bounded by the database", async () => {
+      const bad = await a.db.from("businesses").update({ invoice_reminder_1_days: 9, invoice_reminder_2_days: 8 }).eq("id", a.businessId);
+      expect(bad.error).not.toBeNull();
+      const long = await a.db.from("businesses").update({ quote_followup_template: "x".repeat(1501) }).eq("id", a.businessId);
+      expect(long.error).not.toBeNull();
+      const fine = await a.db.from("businesses").update({ quote_followup_days: 5 }).eq("id", a.businessId);
+      expect(fine.error).toBeNull();
+      await a.db.from("businesses").update({ quote_followup_days: 3 }).eq("id", a.businessId);
+      void today;
+    });
+  });
+
   describe("server-controlled data", () => {
     it("an owner cannot change their own plan or billing columns", async () => {
       await a.db.from("businesses").update({ plan: "business", paddle_subscription_id: "sub_fake" }).eq("id", a.businessId);

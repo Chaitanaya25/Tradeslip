@@ -1,5 +1,5 @@
 /**
- * Database types, hand-written to match supabase/migrations/001-010 exactly.
+ * Database types, hand-written to match supabase/migrations/001-011 exactly.
  *
  * Regenerate from your live database with:
  *   supabase gen types typescript --project-id <id> > src/lib/supabase/types.ts
@@ -58,8 +58,15 @@ type BusinessRow = {
   next_quote_number: number;
   next_invoice_number: number;
   reminders_enabled: boolean;
+  quote_followup_enabled: boolean;
+  quote_followup_days: number;
+  invoice_reminders_enabled: boolean;
+  invoice_reminder_1_days: number;
+  invoice_reminder_2_days: number;
   quote_followup_template: string | null;
   invoice_reminder_template: string | null;
+  invoice_reminder_1_template: string | null;
+  invoice_reminder_2_template: string | null;
   plan: Plan;
   trial_ends_at: string | null;
   paddle_customer_id: string | null;
@@ -246,6 +253,26 @@ type AcceptOtpRow = {
   created_at: string;
 };
 
+type ReminderLogRow = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  business_id: string;
+  entity_type: "quote" | "invoice";
+  entity_id: string;
+  kind: "quote_followup" | "invoice_reminder_1" | "invoice_reminder_2";
+  status: "pending" | "sent" | "failed" | "skipped";
+  reason: string | null;
+  provider_message_id: string | null;
+  number: number | null;
+};
+
+type UnsubscribedEmailRow = {
+  business_id: string;
+  email: string;
+  created_at: string;
+};
+
 type RateLimitRow = {
   id: string;
   created_at: string;
@@ -254,6 +281,65 @@ type RateLimitRow = {
   key: string;
   window_start: string;
   count: number;
+};
+
+/** Rows from list_due_quote_followups (cron only; includes the customer's email, which never leaves the server). */
+type DueQuoteRow = {
+  entity_id: string;
+  business_id: string;
+  number: number;
+  number_prefix: string;
+  total_cents: number;
+  currency: Currency;
+  valid_until: string | null;
+  sent_at: string | null;
+  public_token: string;
+  followup_count: number;
+  last_followup_at: string | null;
+  customer_name: string | null;
+  customer_email: string | null;
+  business_name: string;
+  business_email: string | null;
+  country: Country;
+  timezone: string;
+  plan: Plan;
+  logo_path: string | null;
+  plan_branding: boolean;
+  template: string | null;
+  reminders_enabled: boolean;
+  quote_followup_enabled: boolean;
+  quote_followup_days: number;
+  unsubscribed: boolean;
+};
+
+type DueInvoiceRow = {
+  entity_id: string;
+  business_id: string;
+  number: number;
+  number_prefix: string;
+  total_cents: number;
+  amount_paid_cents: number;
+  currency: Currency;
+  due_date: string;
+  public_token: string;
+  reminder_count: number;
+  last_reminder_at: string | null;
+  customer_name: string | null;
+  customer_email: string | null;
+  business_name: string;
+  business_email: string | null;
+  country: Country;
+  timezone: string;
+  plan: Plan;
+  logo_path: string | null;
+  plan_branding: boolean;
+  template: string | null;
+  reminders_enabled: boolean;
+  invoice_reminders_enabled: boolean;
+  invoice_reminder_1_days: number;
+  invoice_reminder_2_days: number;
+  reminder_kind: "invoice_reminder_1" | "invoice_reminder_2";
+  unsubscribed: boolean;
 };
 
 type Rel<Table extends string, Column extends string, RefTable extends string> = {
@@ -279,6 +365,8 @@ export type Database = {
           | "default_hourly_rate_cents" | "callout_fee_cents" | "payment_terms_days" | "quote_validity_days"
           | "payment_link_url" | "quote_prefix" | "invoice_prefix" | "next_quote_number" | "next_invoice_number"
           | "reminders_enabled" | "quote_followup_template" | "invoice_reminder_template"
+          | "quote_followup_enabled" | "quote_followup_days" | "invoice_reminders_enabled" | "invoice_reminder_1_days" | "invoice_reminder_2_days"
+          | "invoice_reminder_1_template" | "invoice_reminder_2_template"
           | "plan" | "trial_ends_at" | "paddle_customer_id" | "paddle_subscription_id" | "onboarded_at"
         >;
         Update: Partial<BusinessRow>;
@@ -393,6 +481,18 @@ export type Database = {
         Insert: Insertable<AcceptOtpRow, "id" | "attempts" | "used_at" | "created_at">;
         Update: Partial<AcceptOtpRow>;
         Relationships: [Rel<"quote_accept_otps", "quote_id", "quotes">];
+      };
+      reminder_log: {
+        Row: ReminderLogRow;
+        Insert: Insertable<ReminderLogRow, Common | "status" | "reason" | "provider_message_id" | "number">;
+        Update: Partial<ReminderLogRow>;
+        Relationships: [Rel<"reminder_log", "business_id", "businesses">];
+      };
+      unsubscribed_emails: {
+        Row: UnsubscribedEmailRow;
+        Insert: Insertable<UnsubscribedEmailRow, "created_at">;
+        Update: Partial<UnsubscribedEmailRow>;
+        Relationships: [Rel<"unsubscribed_emails", "business_id", "businesses">];
       };
       rate_limits: {
         Row: RateLimitRow;
@@ -512,6 +612,34 @@ export type Database = {
           overdue_count: number;
           overdue_cents: number;
         }[];
+      };
+      claim_reminder: {
+        Args: { p_entity_type: string; p_entity_id: string; p_kind: string };
+        Returns: string | null;
+      };
+      finalize_reminder: {
+        Args: { p_claim_id: string; p_status: string; p_reason: string | null; p_message_id: string | null };
+        Returns: boolean;
+      };
+      list_due_quote_followups: {
+        Args: { p_now: string; p_limit?: number };
+        Returns: DueQuoteRow[];
+      };
+      list_due_invoice_reminders: {
+        Args: { p_now: string; p_limit?: number };
+        Returns: DueInvoiceRow[];
+      };
+      is_unsubscribed: {
+        Args: { p_business_id: string; p_email: string };
+        Returns: boolean;
+      };
+      record_unsubscribe: {
+        Args: { p_business_id: string; p_email: string };
+        Returns: undefined;
+      };
+      expire_due_quotes: {
+        Args: { p_limit?: number };
+        Returns: number;
       };
       customer_summary: {
         Args: { p_business_id: string };

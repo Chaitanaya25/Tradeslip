@@ -16,9 +16,10 @@ All schema lives in plain SQL files. You do not need Docker or `supabase start`.
 | `migrations/008_accept_otp.sql` | Emailed 6-digit code before a customer can accept (`issue_accept_otp`, `accept_quote_verified`), `accepted_verified` flag |
 | `migrations/009_invoices.sql` | Invoices: `invoice_payments`, `save_invoice`, `record_invoice_payment`, `void_invoice`, `create_invoice_from_quote`, public invoice link (`get_public_invoice`, `record_invoice_view`), tamper guards, payment-based `dashboard_stats` |
 | `migrations/010_dashboard_customers.sql` | `customers.archived`, dashboard / list indexes, payment-based `monthly_invoice_totals`, `customer_summary`, `global_search` |
+| `migrations/011_reminders.sql` | Automatic reminders: settings columns, `reminder_log`, `unsubscribed_emails`, claim / finalize / due-list functions, `expire_due_quotes` (service role only) |
 | `seed.sql` | `seed_demo_data(owner uuid)` — demo business "Miller Plumbing" |
 
-Run them **in this order: 001, 002, 003, 004, 005, 006, 007, 008, 009, 010, then seed.sql.** Each file is safe to run twice.
+Run them **in this order: 001, 002, 003, 004, 005, 006, 007, 008, 009, 010, 011, then seed.sql.** Each file is safe to run twice.
 
 ## Option A — SQL editor (simplest)
 
@@ -88,7 +89,7 @@ user B's businesses, customers, quotes or quote items. It creates and deletes us
 **Use a separate throwaway Supabase project for this. Never point it at your main project.**
 
 1. Create a new empty Supabase project.
-2. Run migrations 001–010 on it.
+2. Run migrations 001–011 on it.
 3. Create `.env.test.local` in the repo root:
 
 ```
@@ -106,3 +107,12 @@ Recordings are stored in the private `voice-notes` bucket at `{business_id}/{uui
 deleted when its draft quote is deleted. Re-recording on the same draft leaves the previous file behind, and
 an abandoned recording (never saved to a quote) stays too. **Future task:** a scheduled cleanup of voice notes
 older than 30 days that no quote references.
+
+## Scheduling reminders (Phase 8)
+
+Reminders are sent by `POST /api/cron/reminders`, which must be called about once an hour (it only sends between 8am and 6pm in each business's own timezone, so hourly is what makes every timezone work).
+
+- **Secrets:** set `CRON_SECRET` (the route refuses to run without it) and `REMINDER_UNSUBSCRIBE_SECRET` (signs the unsubscribe links) in `.env.local` and in production. Generate each with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. Never commit them.
+- **Vercel Pro:** `vercel.json` already schedules the route hourly.
+- **Vercel Hobby only allows daily crons.** On Hobby, use an external scheduler instead: the ready-made GitHub Action in `.github/workflows/reminders.yml` (add `APP_URL` and `CRON_SECRET` as repository secrets), or cron-job.org sending `Authorization: Bearer <CRON_SECRET>`. Remove the `crons` entry from `vercel.json` if you do not want Vercel to call it.
+- **Try it locally:** `curl -X POST -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/reminders` returns `{ "scanned", "sent", "skipped", "failed", "expired" }`. Until your sending domain is verified in Resend, Resend only delivers to your own account address.

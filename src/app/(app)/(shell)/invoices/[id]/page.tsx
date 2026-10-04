@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, CircleCheck, MapPin } from "lucide-react";
 import { z } from "zod";
 import { InvoiceActions } from "@/components/invoices/invoice-actions";
+import { ReminderControl } from "@/components/reminders/reminder-control";
 import { TotalsBlock } from "@/components/quotes/totals-block";
 import { Card } from "@/components/ui/card";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -13,6 +14,8 @@ import { describeInvoiceActivity } from "@/lib/invoice-helpers";
 import { formatMoney } from "@/lib/money";
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/payments";
 import { todayInTimezone } from "@/lib/quote-calc";
+import { reminderInfoText } from "@/lib/reminder-messages";
+import { invoiceReminderInfo, settingsFromBusiness } from "@/lib/reminders";
 import { REGIONS, quoteWord } from "@/lib/region";
 import { buildPublicInvoiceUrl } from "@/lib/share-links";
 import { logoPublicUrl } from "@/lib/supabase/storage";
@@ -61,6 +64,21 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const businessAddress = [business.address_line1, business.city, business.region, business.postcode].filter(Boolean).join(", ");
   const customerAddress = [c?.address_line1, c?.city, c?.region, c?.postcode].filter(Boolean).join(", ");
   const word = quoteWord(business.country);
+
+  const reminderInfo = invoiceReminderInfo(
+    {
+      status: invoice.status,
+      dueDate: invoice.due_date,
+      totalCents: invoice.total_cents,
+      amountPaidCents: invoice.amount_paid_cents,
+      reminderCount: invoice.reminder_count,
+      lastReminderAt: invoice.last_reminder_at,
+      customerEmail: c?.email ?? null,
+    },
+    business.timezone,
+    settingsFromBusiness(business),
+    business.plan,
+  );
 
   const hasLink = invoice.status === "sent" || invoice.status === "viewed" || invoice.status === "paid";
   const publicUrl = hasLink ? buildPublicInvoiceUrl(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000", invoice.public_token) : null;
@@ -198,6 +216,17 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             locale={locale}
             today={today}
           />
+
+          {invoice.status !== "draft" && invoice.status !== "void" ? (
+            <ReminderControl
+              entity="invoice"
+              id={invoice.id}
+              infoText={reminderInfoText(reminderInfo, "invoice", locale)}
+              canSend={status === "overdue" && invoice.reminder_count < 2 && Boolean(c?.email)}
+              customerName={c?.name ?? null}
+              label={`Invoice #${label}`}
+            />
+          ) : null}
 
           <Card>
             <h2 className="text-h2 mb-4">Payments</h2>
