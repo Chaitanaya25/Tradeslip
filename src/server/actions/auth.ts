@@ -34,6 +34,15 @@ export async function sendMagicLink(_prev: LoginState, formData: FormData): Prom
   });
 
   if (error) {
+    // Server-side only. Booleans, never values.
+    console.error("[sendMagicLink] signInWithOtp failed", {
+      message: error.message,
+      status: error.status,
+      code: error.code,
+      name: error.name,
+      hasSupabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+      hasAnonKey: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+    });
     const rateLimited = error.status === 429 || /rate limit|too many/i.test(error.message);
     return {
       status: "error",

@@ -19,12 +19,20 @@ export async function requireUser() {
   return user;
 }
 
-/** The signed-in user's business (RLS only lets them see their own), or null. */
+/**
+ * The signed-in user's business (RLS only lets them see their own), or null.
+ * Server-only: the row includes billing columns, so pass client components
+ * only the fields they need.
+ */
 export const getBusiness = cache(async () => {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("businesses")
-    .select("id, name, onboarded_at")
-    .maybeSingle();
+  const { data } = await supabase.from("businesses").select("*").maybeSingle();
   return data;
 });
+
+/** The user's onboarded business, or a redirect to /onboarding. */
+export async function requireBusiness() {
+  const business = await getBusiness();
+  if (!business?.onboarded_at) redirect("/onboarding");
+  return business;
+}

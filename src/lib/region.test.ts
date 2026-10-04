@@ -62,3 +62,24 @@ describe("quoteWord", () => {
     expect(t.taxLabel("AU")).toBe("GST");
   });
 });
+
+describe("taxRegistrationLabel", () => {
+  it("follows the country's tax label", async () => {
+    const { taxRegistrationLabel } = await import("./region");
+    expect(taxRegistrationLabel("US")).toBe("I'm registered for sales tax");
+    expect(taxRegistrationLabel("UK")).toBe("I'm registered for VAT");
+    expect(taxRegistrationLabel("AU")).toBe("I'm registered for GST");
+  });
+});
+
+describe("resolveTimezone", () => {
+  it("keeps a valid browser timezone and falls back to the country default", async () => {
+    const { resolveTimezone, isValidTimeZone } = await import("./region");
+    expect(resolveTimezone("US", "America/Chicago")).toBe("America/Chicago");
+    expect(resolveTimezone("UK", "")).toBe("Europe/London");
+    expect(resolveTimezone("AU", "Not/AZone")).toBe("Australia/Sydney");
+    expect(resolveTimezone("US", undefined)).toBe("America/New_York");
+    expect(isValidTimeZone("Europe/London")).toBe(true);
+    expect(isValidTimeZone("nope")).toBe(false);
+  });
+});

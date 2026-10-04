@@ -1,23 +1,21 @@
 import { redirect } from "next/navigation";
-import { PlaceholderPage } from "@/components/shell/placeholder-page";
+import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 import { getBusiness, requireUser } from "@/lib/auth/session";
+import { initialOnboardingValues } from "@/lib/onboarding-defaults";
+import { logoPublicUrl } from "@/lib/supabase/storage";
 
-export const metadata = { title: "Onboarding · Tradeslip" };
+export const metadata = { title: "Set up your business · Tradeslip" };
 
+// Lives outside the (shell) group on purpose: no sidebar while setting up.
 export default async function OnboardingPage() {
   const user = await requireUser();
   const business = await getBusiness();
   if (business?.onboarded_at) redirect("/dashboard");
 
   return (
-    <PlaceholderPage title="Onboarding" email={user.email}>
-      <p className="text-body text-text-muted">
-        The setup wizard is not built yet. Until it is, load the demo business by running this in the
-        Supabase SQL editor, then reload this page:
-      </p>
-      <pre className="overflow-x-auto rounded-lg bg-surface-muted p-4 text-small text-text">
-        {`select public.seed_demo_data('${user.id}');`}
-      </pre>
-    </PlaceholderPage>
+    <OnboardingWizard
+      initialValues={initialOnboardingValues(business, user.email)}
+      initialLogoUrl={logoPublicUrl(business?.logo_path)}
+    />
   );
 }

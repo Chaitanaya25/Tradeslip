@@ -15,10 +15,13 @@ function initialsOf(name: string): string {
 /** Round avatar showing initials on surface-muted (or an image when `src` is given). */
 function Avatar({
   name,
+  initials,
   src,
   className,
 }: {
   name: string
+  /** Pre-computed initials (otherwise derived from `name`). */
+  initials?: string
   src?: string
   className?: string
 }) {
@@ -34,7 +37,7 @@ function Avatar({
         aria-label={name}
         className="flex size-full items-center justify-center bg-surface-muted text-[15px] font-medium text-text-muted"
       >
-        {initialsOf(name)}
+        {initials ?? initialsOf(name)}
       </AvatarPrimitive.Fallback>
     </AvatarPrimitive.Root>
   )

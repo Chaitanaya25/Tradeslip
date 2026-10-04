@@ -91,6 +91,28 @@ export function quoteWord(country: Country): "Estimate" | "Quote" {
   return REGIONS[country].documentWord;
 }
 
+/** True if `tz` is a valid IANA timezone name the runtime knows. */
+export function isValidTimeZone(tz: string | undefined | null): tz is string {
+  if (!tz) return false;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The browser's timezone if valid, otherwise the country default. */
+export function resolveTimezone(country: Country, browserTz?: string | null): string {
+  return isValidTimeZone(browserTz) ? browserTz : REGIONS[country].defaultTimezone;
+}
+
+/** Onboarding toggle copy: "I'm registered for sales tax" / "VAT" / "GST". */
+export function taxRegistrationLabel(country: Country): string {
+  const label = REGIONS[country].taxLabel;
+  return `I'm registered for ${label === "Sales tax" ? "sales tax" : label}`;
+}
+
 /** Copy helpers, per CLAUDE.md rule 8 (`t.quoteWord()`). */
 export const t = {
   quoteWord,

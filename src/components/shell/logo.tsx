@@ -1,7 +1,15 @@
 import { cn } from "@/lib/utils";
 
 /** Orange outline house/document mark + "Tradeslip" wordmark (20/600). */
-function Logo({ className, showWordmark = true }: { className?: string; showWordmark?: boolean }) {
+function Logo({
+  className,
+  wordmarkClassName,
+  showWordmark = true,
+}: {
+  className?: string;
+  wordmarkClassName?: string;
+  showWordmark?: boolean;
+}) {
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <svg
@@ -21,7 +29,9 @@ function Logo({ className, showWordmark = true }: { className?: string; showWord
         <path d="M11.5 19.5h9M11.5 23h5.5" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" />
       </svg>
       {showWordmark ? (
-        <span className="text-[20px] leading-7 font-semibold tracking-[-0.01em] text-text">Tradeslip</span>
+        <span className={cn("text-[20px] leading-7 font-semibold tracking-[-0.01em] text-text", wordmarkClassName)}>
+          Tradeslip
+        </span>
       ) : null}
     </span>
   );

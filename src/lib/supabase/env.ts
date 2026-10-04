@@ -11,8 +11,21 @@ export function requireEnv(name: string, value: string | undefined): string {
   return value;
 }
 
+/**
+ * The project root, e.g. https://<ref>.supabase.co. Pasting the REST endpoint
+ * (.../rest/v1/) or adding a trailing slash breaks auth, so keep only the origin.
+ */
 export function supabaseUrl(): string {
-  return requireEnv("NEXT_PUBLIC_SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const raw = requireEnv("NEXT_PUBLIC_SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL).trim();
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("bad protocol");
+    return url.origin;
+  } catch {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL is not a valid URL. Use the project URL from Supabase, like https://<ref>.supabase.co",
+    );
+  }
 }
 
 export function supabaseAnonKey(): string {

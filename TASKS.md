@@ -23,10 +23,10 @@ Work top to bottom. One task at a time. After each: `pnpm typecheck && pnpm lint
 - [x] RLS test: user A cannot read user B's rows (vitest against local Supabase). _(written; runs only when `TEST_SUPABASE_*` point at a throwaway project, skipped otherwise)_
 
 ## Phase 2 — Shell, onboarding, price book (Day 6–8)
-- [ ] App shell: sidebar per DESIGN §6 (desktop), icon rail (tablet), bottom tab bar + mic FAB (mobile).
-- [ ] Onboarding 3-step wizard (PRD F1); creates business, seeds 5 trade price items; redirects to dashboard.
-- [ ] Price book page: table, add/edit sheet, archive, search.
-- [ ] Settings: business profile + logo upload, regional/tax, numbering, payment terms/validity, payment link.
+- [x] App shell: sidebar per DESIGN §6 (desktop), icon rail (tablet), bottom tab bar + mic FAB (mobile).
+- [x] Onboarding 3-step wizard (PRD F1); creates business, seeds 5 trade price items; redirects to dashboard.
+- [x] Price book page: table, add/edit sheet, archive, search.
+- [x] Settings: business profile + logo upload, regional/tax, numbering, payment terms/validity, payment link.
 
 ## Phase 3 — Quotes core (Day 9–14)
 - [ ] Customer form component (region-aware address fields).
@@ -111,3 +111,12 @@ _Record ambiguous choices here with date and one-line reason._
 - 2026-10-04: `types.ts` uses literal unions for CHECK-constrained columns; the Supabase CLI would emit `string`, so narrow values after regenerating. Helper aliases live in `src/lib/supabase/tables.ts`. The `seed_*` helper functions are not in the types (editor-only).
 - 2026-10-04: `.env.example` gained `SUPABASE_PROJECT_ID`, `NEXT_PUBLIC_ENABLE_GOOGLE_AUTH` and commented `TEST_SUPABASE_*` vars. RLS tests read `TEST_*` from `.env.test.local` (parsed in `vitest.config.mts` with `node:util` `parseEnv`).
 - 2026-10-04: `@supabase/supabase-js` warns that Node 20 is deprecated; use Node 22+ locally and on Vercel.
+- 2026-10-04: Phase 2 route layout: `(app)/layout.tsx` requires a user + toasts; `(app)/(shell)/layout.tsx` adds the sidebar and redirects users without an onboarded business to `/onboarding`; `/onboarding` sits outside `(shell)` so it never shows the sidebar. Pages that need the business call `requireBusiness()` because layouts do not re-run on client navigation.
+- 2026-10-04: Onboarding saves a draft business on step 1 "Continue" (so a logo can upload to `logos/{business_id}/`), and the wizard resumes from that draft. `completeOnboarding` seeds price items only if none exist and sets `onboarded_at` last, so a failed finish can be retried safely.
+- 2026-10-04: No `@hookform/resolvers`: a ~20-line `zodResolver` in `lib/forms.ts`. Forms hold raw strings; each schema is `z.object(strings).transform(...)` run through one `Check` (`lib/schemas/fields.ts`) so every error shows in a single pass. Money is typed in dollars/pounds and stored as cents; tax rates are typed as percent and stored as basis points.
+- 2026-10-04: Tax: when "registered" is off, `tax_rate_bps` is stored as 0 and `tax_enabled` false (the region default is suggested again when switched on). Registered requires a rate above 0. Phone and business email are required in onboarding; phone is optional in Settings.
+- 2026-10-04: Sidebar user block shows `user_metadata.full_name`, else a prettified email local part (no owner-name column exists). Settings > Business profile has an optional "Your name" saved to auth metadata with `auth.updateUser`.
+- 2026-10-04: Toast is hand-written (`ui/toast.tsx`), no sonner. Price-book type pills reuse existing status colours (labour = viewed blue, material = sent grey, fee = awaiting amber); no new colours. Price-book search/archived filtering is client-side (a solo trader has well under a few hundred items).
+- 2026-10-04: Starter price items (`lib/trade-seeds.ts`) are 5 per trade; labour = multiples of the user's hourly rate, call-out uses the user's fee, fixed USD amounts are scaled x0.8 (GBP) / x1.5 (AUD) to whole units. They are approximate and editable. US spelling "meter" vs "metre" follows the country.
+- 2026-10-04: Settings are nested routes (`/settings/business|regional|numbering|payment-link`), each form with its own action and an explicit column whitelist; country and currency are not editable after onboarding. Billing, Reminders and Data export are disabled "Coming soon" entries.
+- 2026-10-04: `/quotes/new` is a "Coming soon" placeholder so the mobile mic FAB never 404s.
