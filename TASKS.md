@@ -13,14 +13,14 @@ Work top to bottom. One task at a time. After each: `pnpm typecheck && pnpm lint
 - [x] Build UI primitives to spec: Button (primary/secondary/outline-accent/ghost/icon), Input, Select, Card, StatusPill, Toggle, Table, Avatar, IconTile. Create a `/dev/ui` page showing all of them.
 
 ## Phase 1 — Data & auth (Day 3–5)
-- [ ] Migration: businesses, customers, price_items + RLS + `auth_business_id()`.
-- [ ] Migration: quotes, quote_items, invoices, invoice_items, job_photos, activity, usage_counters + RLS + indexes.
-- [ ] Function `next_doc_number(business_id, kind)`; `dashboard_stats`; `monthly_invoice_totals`.
-- [ ] Storage buckets: logos (public), voice-notes (private), job-photos (private) + policies.
-- [ ] `seed.sql`: demo business "Miller Plumbing" (US), 8 customers, 12 price items, quotes/invoices across all statuses (realistic names, no lorem).
-- [ ] Generate types (`pnpm db:types`).
-- [ ] Auth: login page (magic link + Google), callback route, middleware protecting `(app)` routes.
-- [ ] RLS test: user A cannot read user B's rows (vitest against local Supabase).
+- [x] Migration: businesses, customers, price_items + RLS + `auth_business_id()`.
+- [x] Migration: quotes, quote_items, invoices, invoice_items, job_photos, activity, usage_counters + RLS + indexes.
+- [x] Function `next_doc_number(business_id, kind)`; `dashboard_stats`; `monthly_invoice_totals`.
+- [x] Storage buckets: logos (public), voice-notes (private), job-photos (private) + policies.
+- [x] `seed.sql`: demo business "Miller Plumbing" (US), 8 customers, 12 price items, quotes/invoices across all statuses (realistic names, no lorem).
+- [x] Generate types (`pnpm db:types`). _(hand-written to match the migrations; `pnpm db:types` regenerates from the live DB once `SUPABASE_PROJECT_ID` is set)_
+- [x] Auth: login page (magic link + Google), callback route, middleware protecting `(app)` routes. _(Next 16 calls it `proxy.ts`; end-to-end login not yet tried against a live project)_
+- [x] RLS test: user A cannot read user B's rows (vitest against local Supabase). _(written; runs only when `TEST_SUPABASE_*` point at a throwaway project, skipped otherwise)_
 
 ## Phase 2 — Shell, onboarding, price book (Day 6–8)
 - [ ] App shell: sidebar per DESIGN §6 (desktop), icon rail (tablet), bottom tab bar + mic FAB (mobile).
@@ -99,5 +99,15 @@ _Record ambiguous choices here with date and one-line reason._
 - 2026-10-04: `multiplyQtyByRateCents` converts qty to hundredths (qty is numeric(10,2)) and rounds half away from zero. `taxFromBps` uses the same rounding.
 - 2026-10-04: Country key for the UK is `UK` (matches the ARCHITECTURE check constraint), not ISO `GB`. `defaultTaxBps` is 0 (US), 2000 (UK), 1000 (AU); tax is never on by default, the onboarding toggle decides.
 - 2026-10-04: Supabase client files read env lazily (error thrown on first use, not at import) so `pnpm build` works without `.env.local`. `src/lib/supabase/types.ts` is an `any` placeholder until `pnpm db:types` exists (Phase 1).
-- 2026-10-04: `/dev/ui` is left reachable in all environments for now; gate or remove before launch (Phase 10).
+- 2026-10-04: `/dev/*` is public only when `NODE_ENV !== 'production'` (see `src/lib/auth/routes.ts`); remove the page before launch (Phase 10).
 - 2026-10-04: Supabase project creation (local CLI + hosted) is deferred to the user; not done in Phase 0 by instruction.
+- 2026-10-04: Phase 1 SQL is plain files in `supabase/migrations/` (001-004) + `supabase/seed.sql`, applied by pasting into the SQL editor (no Docker). Smoke-tested twice in a scratch PGlite instance with stubbed `auth`/`storage` schemas; not yet run on a real Supabase project.
+- 2026-10-04: Next 16 renamed middleware to `src/proxy.ts`. It is default-deny with an allowlist (`src/lib/auth/routes.ts`): `/`, `/login`, `/pricing`, `/auth/*`, `/q/*`, `/i/*`, `/api/cron/*`, `/api/webhooks/*`, plus `/privacy`, `/terms`, `/robots.txt`, `/sitemap.xml` (needed in Phase 10). Unauthenticated `/api/*` returns 401 JSON; pages redirect to `/login`. Server pages still call `requireUser()`.
+- 2026-10-04: Callback lives at `/auth/callback` (not `(auth)/callback` from ARCHITECTURE §2, because a route group would make the URL `/callback`). After sign-in: no business or `onboarded_at` null -> `/onboarding`, else `/dashboard`. No `next` redirect param yet.
+- 2026-10-04: Security additions beyond ARCHITECTURE §4: trigger `guard_business_billing` stops owners changing `plan`, `trial_ends_at` and `paddle_*` (service role / SQL editor only); `usage_counters` is read-only for owners so limits cannot be reset from the browser; `activity` is insert/select only (audit trail); quotes/invoices/items/photos policies also check that linked customer/quote/price item belong to the same business.
+- 2026-10-04: `public_token` has a DB default (two UUIDs as hex, 64 chars) as a safety net; the app will generate 24-byte base64url tokens in Phase 5 (`lib/tokens.ts`).
+- 2026-10-04: `next_doc_number` is security invoker and called as an RPC, so it is atomic but not in the same transaction as the later insert: a failed insert can leave a gap in numbers, never a duplicate.
+- 2026-10-04: Dashboard stat definitions: owed = unpaid remainder of sent/viewed invoices (incl. overdue, extra `owed_count` column added for "3 invoices"); overdue = the part of owed past `due_date` in the business timezone; paid this/last month = `amount_paid_cents` where `paid_at` falls in that month (business timezone, void excluded); chart groups non-draft, non-void invoices by `issue_date` month, empty months returned as zeros.
+- 2026-10-04: `types.ts` uses literal unions for CHECK-constrained columns; the Supabase CLI would emit `string`, so narrow values after regenerating. Helper aliases live in `src/lib/supabase/tables.ts`. The `seed_*` helper functions are not in the types (editor-only).
+- 2026-10-04: `.env.example` gained `SUPABASE_PROJECT_ID`, `NEXT_PUBLIC_ENABLE_GOOGLE_AUTH` and commented `TEST_SUPABASE_*` vars. RLS tests read `TEST_*` from `.env.test.local` (parsed in `vitest.config.mts` with `node:util` `parseEnv`).
+- 2026-10-04: `@supabase/supabase-js` warns that Node 20 is deprecated; use Node 22+ locally and on Vercel.

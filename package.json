@@ -9,7 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:types": "echo \"db:types: Supabase is not set up yet (Phase 1)\""
+    "db:types": "node scripts/db-types.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
