@@ -28,31 +28,18 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { Toggle } from "@/components/ui/toggle";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { SendProblemsDialog } from "@/components/quotes/send-problems-dialog";
+import { SendSheet } from "@/components/quotes/send-sheet";
+import { getSendProblems } from "@/lib/quote-send";
 import { zodResolver } from "@/lib/forms";
 import { formatMoney } from "@/lib/money";
 import { formatCentsForInput, parsePercentToBps } from "@/lib/money-input";
-import { calculateQuoteTotals, depositCents } from "@/lib/quote-calc";
+import { calculateQuoteTotals, depositCents, todayInTimezone } from "@/lib/quote-calc";
 import { quoteInputSchema, type QuoteFormValues } from "@/lib/schemas/quote";
 import type { DraftApiResponse } from "@/app/api/ai/draft-quote/route";
 import { deleteDraftQuote, duplicateQuote, saveQuoteDraft } from "@/server/actions/quotes";
+import { sendQuote, type SendUsage } from "@/server/actions/quote-sending";
 import type { PhotoDto } from "@/server/actions/quote-photos";
-
-const NEXT_UPDATE = "Available in the next update";
-
-function DisabledAction({ children }: { children: React.ReactNode }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {/* A disabled button gets no pointer events, so the tooltip hangs off a focusable wrapper. */}
-        <span tabIndex={0} className="inline-flex rounded-lg">
-          {children}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top">{NEXT_UPDATE}</TooltipContent>
-    </Tooltip>
-  );
-}
 
 export function QuoteBuilder({
   quoteId,
@@ -89,6 +76,9 @@ export function QuoteBuilder({
     voiceAudioUrl ? { url: voiceAudioUrl, durationSeconds: null } : null,
   );
   const [pendingDraft, setPendingDraft] = useState<{ draft: DraftApiResponse; audio: VoiceAudio } | null>(null);
+  const [problems, setProblems] = useState<string[] | null>(null);
+  const [sendSession, setSendSession] = useState<{ quoteId: string; link: string; usage: SendUsage } | null>(null);
+  const [working, setWorking] = useState<"send" | "preview" | null>(null);
 
   const resolver = useMemo(() => zodResolver(quoteInputSchema) as unknown as Resolver<QuoteFormValues>, []);
   const form = useForm<QuoteFormValues>({ resolver, defaultValues: initialValues });
@@ -192,6 +182,74 @@ export function QuoteBuilder({
       if (result.created) router.replace(`/quotes/${result.quoteId}/edit`);
     });
   });
+
+  /** Validate and save the draft (no toast). Returns the saved quote's id, or null if something is wrong. */
+  async function persist(): Promise<string | null> {
+    setFormError(null);
+    if (!(await form.trigger())) {
+      toast.error("Fix the highlighted fields first.");
+      return null;
+    }
+    const raw = getValues();
+    const result = await saveQuoteDraft(raw, quoteId);
+    if (!result.ok) {
+      setFormError(result.message);
+      for (const [field, message] of Object.entries(result.fieldErrors ?? {})) {
+        setError(field as `title`, { type: "server", message });
+      }
+      toast.error(result.message);
+      return null;
+    }
+    reset(raw);
+    return result.quoteId;
+  }
+
+  /** Send to customer: check what is missing, save, mark as sent, then open the share sheet. */
+  async function onSend() {
+    const parsed = quoteInputSchema.safeParse(getValues());
+    if (!parsed.success) {
+      await form.trigger();
+      toast.error("Fix the highlighted fields first.");
+      return;
+    }
+    const missing = getSendProblems(
+      parsed.data.items,
+      { name: parsed.data.customer.name, email: parsed.data.customer.email, phone: parsed.data.customer.phone },
+      { validUntil: parsed.data.valid_until, today: todayInTimezone(config.timezone) },
+    );
+    if (missing.length > 0) return void setProblems(missing);
+
+    setWorking("send");
+    try {
+      const id = await persist();
+      if (!id) return;
+      const sent = await sendQuote(id, { channel: "link" });
+      if (!sent.ok) {
+        if (sent.problems?.length) setProblems(sent.problems);
+        else toast.error(sent.message);
+        return;
+      }
+      setSendSession({ quoteId: id, link: sent.publicUrl, usage: sent.usage });
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  /** Preview PDF: save first so the PDF matches the screen, then open it in a new tab. */
+  async function onPreview() {
+    // Open the tab straight away (inside the click) so pop-up blockers allow it.
+    const tab = window.open("", "_blank");
+    setWorking("preview");
+    try {
+      const id = formState.isDirty || !quoteId ? await persist() : quoteId;
+      if (!id) return void tab?.close();
+      if (tab) tab.location.href = `/api/pdf/quote/${id}`;
+      else window.open(`/api/pdf/quote/${id}`, "_blank");
+      if (!quoteId) router.replace(`/quotes/${id}/edit`);
+    } finally {
+      setWorking(null);
+    }
+  }
 
   function duplicate() {
     if (!quoteId) return;
@@ -381,24 +439,42 @@ export function QuoteBuilder({
 
           {/* Sticky action bar: sits above the mobile tab bar, at the bottom edge on larger screens. */}
           <div className="sticky bottom-[calc(57px+env(safe-area-inset-bottom))] z-20 -mx-6 mt-6 -mb-6 flex flex-wrap items-center justify-end gap-3 rounded-b-lg border-t border-border bg-surface px-6 py-4 md:bottom-0">
-            <Button type="submit" variant="secondary" disabled={pending}>
+            <Button type="submit" variant="secondary" disabled={pending || working !== null}>
               {pending ? "Saving..." : "Save draft"}
             </Button>
-            <DisabledAction>
-              <Button type="button" variant="secondary" disabled>
-                Preview PDF
-              </Button>
-            </DisabledAction>
-            <DisabledAction>
-              <Button type="button" disabled>
-                <Send /> Send to customer
-              </Button>
-            </DisabledAction>
+            <Button type="button" variant="secondary" onClick={onPreview} disabled={pending || working !== null}>
+              {working === "preview" ? "Preparing..." : "Preview PDF"}
+            </Button>
+            <Button type="button" onClick={onSend} disabled={pending || working !== null}>
+              <Send /> {working === "send" ? "Sending..." : "Send to customer"}
+            </Button>
           </div>
         </Card>
       </form>
 
       {unsavedDialog}
+      <SendProblemsDialog problems={problems} quoteWord={word} onClose={() => setProblems(null)} />
+      {sendSession ? (
+        <SendSheet
+          open
+          onOpenChange={(open) => {
+            // Once sent the draft is read-only, so closing the sheet goes to the quote's page.
+            if (!open) router.replace(`/quotes/${sendSession.quoteId}`);
+          }}
+          quoteId={sendSession.quoteId}
+          link={sendSession.link}
+          customer={{
+            name: getValues("customer.name") || null,
+            email: getValues("customer.email") || null,
+            phone: getValues("customer.phone") || null,
+          }}
+          businessName={config.businessName}
+          country={config.country}
+          quoteWord={word}
+          usage={sendSession.usage}
+          justSent
+        />
+      ) : null}
       <ConfirmDialog
         open={pendingDraft !== null}
         onOpenChange={(open) => {

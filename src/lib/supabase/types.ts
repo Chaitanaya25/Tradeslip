@@ -389,6 +389,30 @@ export type Database = {
         Args: { p_ip: string; p_key: string; p_window_start: string };
         Returns: number;
       };
+      get_public_quote: {
+        Args: { p_token: string };
+        Returns: Json | null;
+      };
+      record_quote_view: {
+        Args: { p_token: string };
+        Returns: boolean;
+      };
+      accept_quote: {
+        Args: { p_token: string; p_name: string; p_ip: string; p_ua: string };
+        Returns: string;
+      };
+      decline_quote: {
+        Args: { p_token: string; p_reason: string };
+        Returns: string;
+      };
+      reserve_quote_send: {
+        Args: { p_business_id: string; p_period: string; p_limit: number };
+        Returns: number | null;
+      };
+      refund_quote_send: {
+        Args: { p_business_id: string; p_period: string };
+        Returns: undefined;
+      };
       dashboard_stats: {
         Args: { p_business_id: string };
         Returns: {

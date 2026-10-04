@@ -19,7 +19,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
     env: testEnv(),
     // Real network calls to Supabase (user creation, sign-in) can be slow.
     testTimeout: 30_000,

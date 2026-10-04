@@ -12,6 +12,8 @@ export function builderConfig(business: Business): BuilderConfig {
     locale: REGIONS[business.country].locale,
     quoteWord: quoteWord(business.country),
     docPrefix: business.quote_prefix,
+    timezone: business.timezone,
+    businessName: business.name,
     taxEnabled: business.tax_enabled,
     taxLabel: business.tax_label,
     taxRateBps: business.tax_rate_bps,

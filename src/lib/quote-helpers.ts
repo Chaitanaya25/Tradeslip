@@ -178,6 +178,14 @@ export function describeActivity(event: string, meta: Meta, quoteWord: string): 
       return `${word} accepted${typeof meta?.name === "string" ? ` by ${meta.name}` : ""}`;
     case "quote.declined":
       return `${word} declined${typeof meta?.reason === "string" && meta.reason ? `: ${meta.reason}` : ""}`;
+    case "quote.resent":
+      return `${word} sent again${typeof meta?.via === "string" ? ` by ${meta.via}` : ""}`;
+    case "quote.emailed":
+      return `${word} emailed to the customer`;
+    case "quote.shared":
+      return `Link shared${typeof meta?.via === "string" ? ` by ${meta.via === "sms" ? "text message" : meta.via}` : ""}`;
+    case "quote.link_regenerated":
+      return "New link created. The old link stopped working";
     case "quote.followup_sent":
       return "Follow-up reminder sent";
     default:

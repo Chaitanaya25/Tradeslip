@@ -10,6 +10,8 @@ import { requireBusiness } from "@/lib/auth/session";
 import { formatDateOnly, formatDateTime } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { formatBpsAsPercent } from "@/lib/money-input";
+import { quoteSendLimit, quoteSendsRemaining, usagePeriod } from "@/lib/plans";
+import { buildPublicUrl } from "@/lib/share-links";
 import { depositCents } from "@/lib/quote-calc";
 import { describeActivity } from "@/lib/quote-helpers";
 import { loadPhotos } from "@/lib/quote-queries";
@@ -48,6 +50,14 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
       .limit(50),
     loadPhotos(business.id, id),
   ]);
+
+  const { data: counter } = await supabase
+    .from("usage_counters")
+    .select("quotes_sent")
+    .eq("business_id", business.id)
+    .eq("period", usagePeriod(business.timezone))
+    .maybeSingle();
+  const usedThisMonth = counter?.quotes_sent ?? 0;
 
   const region = REGIONS[business.country];
   const locale = region.locale;
@@ -179,12 +189,34 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
         </Card>
 
         <div className="space-y-6 lg:col-span-2">
+          {quote.status === "accepted" || quote.status === "declined" ? (
+            <Card>
+              <h2 className="text-h2 mb-2">{quote.status === "accepted" ? "Accepted" : "Declined"}</h2>
+              {quote.status === "accepted" ? (
+                <p className="text-body">
+                  Accepted by <span className="text-body-strong">{quote.accepted_name}</span> on{" "}
+                  {formatDateTime(quote.accepted_at, locale, business.timezone)}.
+                </p>
+              ) : (
+                <p className="text-body">
+                  Declined on {formatDateTime(quote.declined_at, locale, business.timezone)}.
+                  {quote.decline_reason ? <span className="mt-1 block text-text-muted">Reason: {quote.decline_reason}</span> : null}
+                </p>
+              )}
+            </Card>
+          ) : null}
+
           <QuoteActions
             quoteId={quote.id}
             status={quote.status}
             statusLabel={statusLabel}
             quoteWord={word}
             docPrefix={business.quote_prefix}
+            publicUrl={quote.status === "draft" ? null : buildPublicUrl(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000", quote.public_token)}
+            customer={{ name: c?.name ?? null, email: c?.email ?? null, phone: c?.phone ?? null }}
+            businessName={business.name}
+            country={business.country}
+            usage={{ limit: quoteSendLimit(business.plan), remaining: quoteSendsRemaining(business.plan, usedThisMonth) }}
           />
 
           <Card>

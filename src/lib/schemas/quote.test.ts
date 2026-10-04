@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyCustomer, emptyItem, quoteInputSchema, validateQuoteForSending, type QuoteFormValues } from "./quote";
+import { emptyCustomer, emptyItem, quoteInputSchema, type QuoteFormValues } from "./quote";
 
 const base = (): QuoteFormValues => ({
   customer: { ...emptyCustomer(), name: "Sarah Thompson", phone: "(413) 555-0182", email: "sarah@example.com", postcode: "01103" },
@@ -127,16 +127,5 @@ describe("quoteInputSchema: voice note", () => {
   });
   it("rejects an enormous transcript", () => {
     expect(errors({ ...base(), transcript: "a".repeat(5001) })).toHaveProperty("transcript");
-  });
-});
-
-describe("validateQuoteForSending", () => {
-  it("passes a complete quote", () => {
-    expect(validateQuoteForSending(quoteInputSchema.parse(base()))).toEqual([]);
-  });
-  it("flags no items and unpriced lines", () => {
-    expect(validateQuoteForSending(quoteInputSchema.parse({ ...base(), items: [] }))).toEqual(["Add at least one item."]);
-    const q = quoteInputSchema.parse({ ...base(), items: [{ ...emptyItem(), description: "Mixer tap" }, { ...emptyItem(), description: "Fitting" }] });
-    expect(validateQuoteForSending(q)).toEqual(["2 items still need a price."]);
   });
 });

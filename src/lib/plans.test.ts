@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AI_DRAFTS_PER_MINUTE, AI_DRAFT_LIMITS, aiDraftLimit, limitReachedMessage, rateLimitWindowStart, usagePeriod } from "./plans";
+import { FREE_QUOTES_PER_MONTH, quoteLimitMessage, quoteSendLimit, quoteSendsRemaining, AI_DRAFTS_PER_MINUTE, AI_DRAFT_LIMITS, aiDraftLimit, limitReachedMessage, rateLimitWindowStart, usagePeriod } from "./plans";
 
 describe("aiDraftLimit", () => {
   it("matches the plan table", () => {
@@ -33,5 +33,24 @@ describe("rateLimitWindowStart", () => {
     expect(rateLimitWindowStart(new Date("2026-10-04T10:00:59.999Z"))).toBe("2026-10-04T10:00:00.000Z");
     expect(rateLimitWindowStart(new Date("2026-10-04T10:01:00.000Z"))).toBe("2026-10-04T10:01:00.000Z");
     expect(AI_DRAFTS_PER_MINUTE).toBe(5);
+  });
+});
+
+describe("free-plan quote limit", () => {
+  it("is 3 a month on free and unlimited otherwise", () => {
+    expect(FREE_QUOTES_PER_MONTH).toBe(3);
+    expect(quoteSendLimit("free")).toBe(3);
+    for (const plan of ["trial", "pro", "business"]) expect(quoteSendLimit(plan)).toBeNull();
+  });
+  it("counts what is left", () => {
+    expect(quoteSendsRemaining("free", 0)).toBe(3);
+    expect(quoteSendsRemaining("free", 2)).toBe(1);
+    expect(quoteSendsRemaining("free", 3)).toBe(0);
+    expect(quoteSendsRemaining("free", 9)).toBe(0);
+    expect(quoteSendsRemaining("pro", 50)).toBeNull();
+  });
+  it("words the upgrade message with the document word", () => {
+    expect(quoteLimitMessage("Estimate")).toMatch(/3 estimates this month/);
+    expect(quoteLimitMessage("Quote")).toMatch(/3 quotes this month/);
   });
 });

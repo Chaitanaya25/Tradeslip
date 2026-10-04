@@ -47,13 +47,13 @@ Work top to bottom. One task at a time. After each: `pnpm typecheck && pnpm lint
 - [x] Mic entry points: dashboard mic button and New Quote → recorder sheet.
 
 ## Phase 5 — Sending & public pages (Day 19–22)
-- [ ] `public_token` generation; Send sheet (copy link, email via Resend, SMS + WhatsApp deep links).
-- [ ] Email templates: quote to customer; viewed/accepted/declined to owner.
-- [ ] Public quote page `/q/[token]` matching `03-customer-quote-mobile.png` (server component, whitelisted fields only).
-- [ ] View tracking (first view only, skip owner session).
-- [ ] Accept modal (name + checkbox) → store acceptance evidence; confirmation state + "Pay deposit" if applicable.
-- [ ] Decline with optional reason; Ask a question (mailto/sms).
-- [ ] Quote PDF (auth + public routes).
+- [x] `public_token` generation; Send sheet (copy link, email via Resend, SMS + WhatsApp deep links).
+- [x] Email templates: quote to customer; viewed/accepted/declined to owner.
+- [x] Public quote page `/q/[token]` matching `03-customer-quote-mobile.png` (server component, whitelisted fields only).
+- [x] View tracking (first view only, skip owner session).
+- [x] Accept modal (name + checkbox) → store acceptance evidence; confirmation state + "Pay deposit" if applicable.
+- [x] Decline with optional reason; Ask a question (mailto/sms).
+- [x] Quote PDF (auth + public routes).
 
 ## Phase 6 — Invoices (Day 23–26)
 - [ ] Convert accepted quote → invoice (one tap); create from scratch.
@@ -134,3 +134,9 @@ _Record ambiguous choices here with date and one-line reason._
 - 2026-10-04: Post-processing is the only thing that decides prices: a known price-book id gets the book rate (markup applied to materials) whatever the AI said; unknown ids are dropped; spoken prices above $100,000 or negative are treated as unpriced; call-out items are added only if the speaker says call-out, or the business charges one and the speech clearly describes a site visit (small phrase list), and never duplicated.
 - 2026-10-04: Applying a draft replaces customer, title, notes and items (after a confirm if the form already has content) and sets the voice note + transcript on the form; nothing is saved until Save draft. A draft with no items and no customer only stores the transcript. Re-recording or abandoning a recording leaves the old voice file behind (cleanup is a documented future task); deleting a draft deletes its voice note.
 - 2026-10-04: `AI_DRAFTING_ENABLED=false` (or a missing `GEMINI_API_KEY`) shows the manual-entry message in the voice card and the API returns 503. Mic buttons on the mobile bar, Quotes header and Dashboard open `/quotes/new?record=1`.
+- 2026-10-04: Phase 5 adds migration `007_public_quotes.sql`: `get_public_quote`, `record_quote_view`, `accept_quote`, `decline_quote`, `reserve_quote_send`, `refund_quote_send`, all SECURITY DEFINER and executable by the service role only. The public JSON is a whitelist (it also returns the quote number prefix, business timezone and a `plan_branding` boolean, never ids, the token, the owner's email or the plan name); `photos` carries storage paths for server-side signing only. Unknown tokens and drafts both return null. Open quotes past `valid_until` read as `expired` (business timezone) without changing the stored status.
+- 2026-10-04: Sending: opening the Send sheet performs the send (marks the quote sent, uses a free-plan slot, issues a fresh app-generated `public_token`); the placeholder token a draft got from the database default is never shared. Email/SMS/WhatsApp from the sheet are extra deliveries (`quote.emailed` / `quote.shared`). Free plan = 3 first-sends per business-timezone month via the atomic `reserve_quote_send` (refunded if the status update fails); trial and paid are unlimited. Owner-side actions live in `server/actions/quote-sending.ts` (not appended to quotes.ts) because "use server" files can only export async functions.
+- 2026-10-04: `getSendProblems` (lib/quote-send.ts) replaces the Phase 3 `validateQuoteForSending`; it runs in the builder (checklist) and on the server, and also rejects a first send whose valid-until date has passed. The state machine (accept/decline/expiry/first view) is mirrored in pure functions so it is unit tested next to the SQL.
+- 2026-10-04: First view is recorded server-side when the page renders, only for status `sent`, skipping bots/previewers (user-agent list, empty UA counts as a bot) and the signed-in owner (a user-client lookup by token under RLS only returns the owner's own quote). The owner gets one email, via `after()`; accept/decline always email. Rate limits (10/min per IP and per token for accept/decline; PDF 10/min per IP) use `rate_limit_hit` with subjects `ip:{ip}` and `tok:{sha256 prefix}`.
+- 2026-10-04: No new dependency: `resend`, `@react-email/components` and `@react-pdf/renderer` were installed in Phase 0. Inter TTFs (OFL, license in `public/fonts/Inter-OFL.txt`) were copied from the `@expo-google-fonts/inter` package without adding it. `next.config.ts` traces `public/fonts` into the two PDF routes. PDFs support PNG/JPEG logos only (other formats fall back to the monogram).
+- 2026-10-04: Email deliverability: customer and owner emails send from `EMAIL_FROM`; until that domain is verified in Resend, Resend only delivers to the account owner. Failures return a friendly message and never break the flow.

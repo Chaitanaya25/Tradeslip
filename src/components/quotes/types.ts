@@ -26,6 +26,8 @@ export type BuilderConfig = {
   locale: string;
   quoteWord: string;
   docPrefix: string;
+  timezone: string;
+  businessName: string;
   taxEnabled: boolean;
   taxLabel: string;
   taxRateBps: number;

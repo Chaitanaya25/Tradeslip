@@ -138,16 +138,3 @@ export const emptyCustomer = (): QuoteFormValues["customer"] => ({
   region: "",
   postcode: "",
 });
-
-/**
- * Extra rules for a quote that is about to be sent (Phase 5). Drafts may have no
- * items and unpriced lines; a sent quote may not. Returns plain-language problems.
- */
-export function validateQuoteForSending(quote: Pick<QuoteInput, "items" | "customer">): string[] {
-  const problems: string[] = [];
-  if (!quote.customer.name.trim()) problems.push("Add the customer's name.");
-  if (quote.items.length === 0) problems.push("Add at least one item.");
-  const unpriced = quote.items.filter((i) => i.needs_price || i.unit_rate_cents <= 0).length;
-  if (unpriced > 0) problems.push(unpriced === 1 ? "1 item still needs a price." : `${unpriced} items still need a price.`);
-  return problems;
-}

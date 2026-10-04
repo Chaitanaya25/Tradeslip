@@ -126,6 +126,14 @@ describe("describeActivity", () => {
     expect(describeActivity("quote.accepted", { name: "Sarah Thompson" }, "Estimate")).toBe("Estimate accepted by Sarah Thompson");
     expect(describeActivity("quote.declined", { reason: "Too dear" }, "Quote")).toBe("Quote declined: Too dear");
   });
+  it("words the sending events", () => {
+    expect(describeActivity("quote.resent", { via: "email" }, "Quote")).toBe("Quote sent again by email");
+    expect(describeActivity("quote.emailed", {}, "Estimate")).toBe("Estimate emailed to the customer");
+    expect(describeActivity("quote.shared", { via: "sms" }, "Quote")).toBe("Link shared by text message");
+    expect(describeActivity("quote.shared", { via: "whatsapp" }, "Quote")).toBe("Link shared by whatsapp");
+    expect(describeActivity("quote.link_regenerated", {}, "Quote")).toMatch(/old link stopped/);
+    expect(describeActivity("quote.viewed", {}, "Estimate")).toBe("Estimate viewed by customer");
+  });
   it("falls back to a readable label", () => {
     expect(describeActivity("quote.something_new", {}, "Quote")).toBe("Something new");
   });

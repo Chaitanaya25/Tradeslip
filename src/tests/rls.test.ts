@@ -359,6 +359,67 @@ describe.skipIf(!configured)("Row Level Security", () => {
     });
   });
 
+  describe("public quote functions (Phase 5)", () => {
+    let token: string;
+
+    beforeAll(async () => {
+      token = `t${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "")}`.slice(0, 48);
+      await admin.from("quotes").update({ status: "sent", public_token: token, sent_at: new Date().toISOString() }).eq("id", a.quoteId);
+    });
+
+    it("signed-in owners and anonymous clients cannot call any public function", async () => {
+      const anon = newClient(anonKey!);
+      for (const client of [a.db, b.db, anon]) {
+        expect((await client.rpc("get_public_quote", { p_token: token })).error).not.toBeNull();
+        expect((await client.rpc("record_quote_view", { p_token: token })).error).not.toBeNull();
+        expect((await client.rpc("accept_quote", { p_token: token, p_name: "Eve Hacker", p_ip: "1.1.1.1", p_ua: "x" })).error).not.toBeNull();
+        expect((await client.rpc("decline_quote", { p_token: token, p_reason: "x" })).error).not.toBeNull();
+        expect((await client.rpc("reserve_quote_send", { p_business_id: a.businessId, p_period: "2099-01", p_limit: 99 })).error).not.toBeNull();
+      }
+      const status = await admin.from("quotes").select("status").eq("id", a.quoteId).single();
+      expect(status.data?.status).toBe("sent");
+    });
+
+    it("user B cannot read user A's quote by its public token", async () => {
+      const read = await b.db.from("quotes").select("id").eq("public_token", token);
+      expect(read.data ?? []).toEqual([]);
+      const own = await a.db.from("quotes").select("id").eq("public_token", token);
+      expect(own.data).toHaveLength(1);
+    });
+
+    it("get_public_quote returns only whitelisted fields", async () => {
+      const { data, error } = await admin.rpc("get_public_quote", { p_token: token });
+      expect(error).toBeNull();
+      const pub = data as Record<string, Record<string, unknown>>;
+      expect(Object.keys(pub).sort()).toEqual(["business", "customer", "items", "photos", "quote"]);
+      expect(Object.keys(pub.business).sort()).toEqual([
+        "country", "email", "logo_path", "name", "payment_link_url", "phone", "plan_branding", "tax_label", "tax_number", "timezone", "trade",
+      ]);
+      const flat = JSON.stringify(data);
+      for (const forbidden of ["owner_id", "business_id", "public_token", "paddle", '"plan"', a.userId, a.businessId, a.quoteId]) {
+        expect(flat).not.toContain(forbidden);
+      }
+    });
+
+    it("a draft or unknown token returns null (indistinguishable)", async () => {
+      await admin.from("quotes").update({ status: "draft" }).eq("id", a.quoteId);
+      const draft = await admin.rpc("get_public_quote", { p_token: token });
+      const unknown = await admin.rpc("get_public_quote", { p_token: "z".repeat(48) });
+      expect(draft.data).toBeNull();
+      expect(unknown.data).toBeNull();
+      await admin.from("quotes").update({ status: "sent" }).eq("id", a.quoteId);
+    });
+
+    it("accept is atomic and idempotent, and sticks", async () => {
+      const first = await admin.rpc("accept_quote", { p_token: token, p_name: "Sarah Thompson", p_ip: "203.0.113.9", p_ua: "test" });
+      const second = await admin.rpc("accept_quote", { p_token: token, p_name: "Someone Else", p_ip: "203.0.113.10", p_ua: "test" });
+      const decline = await admin.rpc("decline_quote", { p_token: token, p_reason: "changed my mind" });
+      expect([first.data, second.data, decline.data]).toEqual(["ok", "already_accepted", "not_allowed"]);
+      const row = await admin.from("quotes").select("status, accepted_name").eq("id", a.quoteId).single();
+      expect(row.data).toEqual({ status: "accepted", accepted_name: "Sarah Thompson" });
+    });
+  });
+
   describe("server-controlled data", () => {
     it("an owner cannot change their own plan or billing columns", async () => {
       await a.db.from("businesses").update({ plan: "business", paddle_subscription_id: "sub_fake" }).eq("id", a.businessId);
