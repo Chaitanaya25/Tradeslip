@@ -1,0 +1,187 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* ------------------------------------------------------------------ *
+ * Tradeslip design tokens — DESIGN.md §2–4. Light only (no dark in V1).
+ * ------------------------------------------------------------------ */
+:root {
+  --bg: #faf9f7;
+  --surface: #ffffff;
+  --surface-muted: #f5f4f1;
+  --border: #e7e5e0;
+  --border-strong: #d6d3cd;
+  --text: #1c1917;
+  --text-muted: #78716c;
+  --text-subtle: #a8a29e;
+  --accent: #e8590c;
+  --accent-hover: #d24e08;
+  --accent-soft: #fdede3;
+  --accent-border: #f6c3a3;
+
+  /* Status pills: soft bg + darker text */
+  --status-good-bg: #e7f6ec;
+  --status-good-text: #1e7b43;
+  --status-info-bg: #e6f0fb;
+  --status-info-text: #2563a8;
+  --status-neutral-bg: #f0efec;
+  --status-neutral-text: #57534e;
+  --status-warn-bg: #fdf3dc;
+  --status-warn-text: #9a6b00;
+  --status-bad-bg: #fde8e6;
+  --status-bad-text: #c2361f;
+  --status-expired-text: #a8a29e;
+
+  --positive: #1e7b43;
+  --destructive: #c2361f;
+  --row-hover: #fcfbf9;
+
+  --radius: 8px;
+
+  /* shadcn semantic names mapped onto the tokens above */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-muted);
+  --secondary-foreground: var(--text);
+  --muted: var(--surface-muted);
+  --muted-foreground: var(--text-muted);
+  --input: var(--border-strong);
+  --ring: var(--accent);
+}
+
+@theme inline {
+  /* Tradeslip tokens */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-subtle: var(--text-subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-border: var(--accent-border);
+  --color-status-good-bg: var(--status-good-bg);
+  --color-status-good-text: var(--status-good-text);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-status-info-text: var(--status-info-text);
+  --color-status-neutral-bg: var(--status-neutral-bg);
+  --color-status-neutral-text: var(--status-neutral-text);
+  --color-status-warn-bg: var(--status-warn-bg);
+  --color-status-warn-text: var(--status-warn-text);
+  --color-status-bad-bg: var(--status-bad-bg);
+  --color-status-bad-text: var(--status-bad-text);
+  --color-status-expired-text: var(--status-expired-text);
+  --color-positive: var(--positive);
+  --color-destructive: var(--destructive);
+  --color-row-hover: var(--row-hover);
+
+  /* shadcn semantic colours (kept so generated primitives resolve) */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Radius: 8px everywhere, 6px for pills (radius-sm). Avatars/toggles use full. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-xl: 8px;
+  --radius-2xl: 8px;
+  --radius-3xl: 8px;
+  --radius-4xl: 8px;
+
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+
+  /* Elevation: cards use a border; these are the only shadows */
+  --shadow-card: 0 1px 2px rgba(28, 25, 23, 0.04);
+  --shadow-pop: 0 8px 24px rgba(28, 25, 23, 0.08);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    font-family: var(--font-sans);
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 22px;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Focus rings always visible (DESIGN §10) */
+  :focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+    outline-offset: 2px;
+  }
+}
+
+/* Tabular figures for money, quantities, dates and table numbers */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Type scale — DESIGN §3 */
+@utility text-display {
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+@utility text-h2 {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+@utility text-stat {
+  font-size: 30px;
+  line-height: 36px;
+  font-weight: 600;
+}
+@utility text-total {
+  font-size: 30px;
+  line-height: 36px;
+  font-weight: 700;
+}
+@utility text-body {
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 400;
+}
+@utility text-body-strong {
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 500;
+}
+@utility text-small {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+}
+@utility text-label {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+}
